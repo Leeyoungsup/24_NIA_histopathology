@@ -18,9 +18,9 @@ from pydicom.tag import SequenceDelimiterTag, TupleTag
 from pydicom.uid import UID
 from scipy.ndimage import zoom
 
-import pathml.core
-import pathml.core.tile
-from pathml.utils import pil_to_rgb
+import pathSeg.core
+import pathSeg.core.tile
+from pathSeg.utils import pil_to_rgb
 
 try:
     import bioformats
@@ -29,7 +29,7 @@ try:
 except ImportError:
     logger.exception("Unable to import bioformats, javabridge")
     raise Exception(
-        "Installation of PathML not complete. Please install openjdk8, bioformats, and javabridge:\nconda install openjdk==8.0.152\npip install javabridge==1.0.19 python-bioformats==4.0.0\nFor detailed installation instructions, please see https://github.com/Dana-Farber-AIOS/pathml/"
+        "Installation of pathSeg not complete. Please install openjdk8, bioformats, and javabridge:\nconda install openjdk==8.0.152\npip install javabridge==1.0.19 python-bioformats==4.0.0\nFor detailed installation instructions, please see https://github.com/Dana-Farber-AIOS/pathSeg/"
     )
 
 
@@ -98,12 +98,12 @@ class OpenSlideBackend(SlideBackend):
                 level < self.slide.level_count
             ), f"input level {level} invalid for a slide with {self.slide.level_count} levels"
 
-        # openslide read_region expects (x, y) coords, so need to switch order for compatibility with pathml (i, j)
+        # openslide read_region expects (x, y) coords, so need to switch order for compatibility with pathSeg (i, j)
         i, j = location
 
         # openslide read_region() uses coords in the level 0 reference frame
         # if we are reading tiles from a higher level, need to convert to level 0 frame by multiplying by scale factor
-        # see: https://github.com/Dana-Farber-AIOS/pathml/issues/240
+        # see: https://github.com/Dana-Farber-AIOS/pathSeg/issues/240
         coord_scale_factor = int(self.slide.level_downsamples[level])
         i *= coord_scale_factor
         j *= coord_scale_factor
@@ -169,7 +169,7 @@ class OpenSlideBackend(SlideBackend):
                 Defaults to 0 (highest resolution).
 
         Yields:
-            pathml.core.tile.Tile: Extracted Tile object
+            pathSeg.core.tile.Tile: Extracted Tile object
         """
         assert isinstance(shape, int) or (
             isinstance(shape, tuple) and len(shape) == 2
@@ -198,7 +198,7 @@ class OpenSlideBackend(SlideBackend):
         stride_i, stride_j = stride
 
         # calculate number of expected tiles
-        # check for tile shape evenly dividing slide shape to fix https://github.com/Dana-Farber-AIOS/pathml/issues/305
+        # check for tile shape evenly dividing slide shape to fix https://github.com/Dana-Farber-AIOS/pathSeg/issues/305
         if pad and i % stride_i != 0:
             n_tiles_i = i // stride_i + 1
         else:
@@ -213,7 +213,7 @@ class OpenSlideBackend(SlideBackend):
                 coords = (int(ix_i * stride_i), int(ix_j * stride_j))
                 # get image for tile
                 tile_im = self.extract_region(location=coords, size=shape, level=level)
-                yield pathml.core.tile.Tile(image=tile_im, coords=coords)
+                yield pathSeg.core.tile.Tile(image=tile_im, coords=coords)
 
 
 def _init_logger():
@@ -258,7 +258,7 @@ class BioFormatsBackend(SlideBackend):
 
     Note:
         While the Bio-Formats convention uses XYZCT channel order, we use YXZCT for compatibility with the rest of
-        PathML which is based on (i, j) coordinate system.
+        pathSeg which is based on (i, j) coordinate system.
     """
 
     def __init__(self, filename, dtype=None):
@@ -290,7 +290,7 @@ class BioFormatsBackend(SlideBackend):
                 reader.getSizeC(),
                 reader.getSizeT(),
             )
-            # use yxzct for compatibility with the rest of PathML which uses i,j coords (not x, y)
+            # use yxzct for compatibility with the rest of pathSeg which uses i,j coords (not x, y)
             sizeSeries.append((sizey, sizex, sizez, sizec, sizet))
         s = [s[0] * s[1] for s in sizeSeries]
 
@@ -484,7 +484,7 @@ class BioFormatsBackend(SlideBackend):
             return array
         else:
             logger.info("normalizing extracted region to uint8")
-            # scale array before converting: https://github.com/Dana-Farber-AIOS/pathml/issues/271
+            # scale array before converting: https://github.com/Dana-Farber-AIOS/pathSeg/issues/271
             # first scale to [0-1]
             array_scaled = array / (2 ** (8 * self.pixel_dtype.itemsize))
             logger.info(
@@ -549,7 +549,7 @@ class BioFormatsBackend(SlideBackend):
             **kwargs: Other arguments passed through to ``extract_region()`` method.
 
         Yields:
-            pathml.core.tile.Tile: Extracted Tile object
+            pathSeg.core.tile.Tile: Extracted Tile object
         """
         assert isinstance(level, int), f"level {level} invalid. Must be an int."
         assert (
@@ -577,7 +577,7 @@ class BioFormatsBackend(SlideBackend):
         stride_i, stride_j = stride
 
         # calculate number of expected tiles
-        # check for tile shape evenly dividing slide shape to fix https://github.com/Dana-Farber-AIOS/pathml/issues/305
+        # check for tile shape evenly dividing slide shape to fix https://github.com/Dana-Farber-AIOS/pathSeg/issues/305
         if pad and i % stride_i != 0:
             n_tiles_i = i // stride_i + 1
         else:
@@ -597,7 +597,7 @@ class BioFormatsBackend(SlideBackend):
                     tile_im = self.extract_region(
                         location=coords, size=shape, level=level, **kwargs
                     )
-                    yield pathml.core.tile.Tile(image=tile_im, coords=coords)
+                    yield pathSeg.core.tile.Tile(image=tile_im, coords=coords)
                 else:
                     unpaddedshape = (
                         i - coords[0] if coords[0] + shape[0] > i else shape[0],
@@ -613,7 +613,7 @@ class BioFormatsBackend(SlideBackend):
                     )
                     padded_im = np.zeros(zeroarrayshape)
                     padded_im[: tile_im.shape[0], : tile_im.shape[1], ...] = tile_im
-                    yield pathml.core.tile.Tile(image=padded_im, coords=coords)
+                    yield pathSeg.core.tile.Tile(image=padded_im, coords=coords)
 
 
 class DICOMBackend(SlideBackend):
@@ -886,7 +886,7 @@ class DICOMBackend(SlideBackend):
                 Defaults to ``False``.
 
         Yields:
-            pathml.core.tile.Tile: Extracted Tile object
+            pathSeg.core.tile.Tile: Extracted Tile object
         """
         assert level == 0 or level is None, "dicom does not support levels"
         for i in range(self.n_frames):
@@ -901,5 +901,5 @@ class DICOMBackend(SlideBackend):
 
             frame_im = self.extract_region(location=i)
             coords = self._index_to_coords(i)
-            frame_tile = pathml.core.tile.Tile(image=frame_im, coords=coords)
+            frame_tile = pathSeg.core.tile.Tile(image=frame_im, coords=coords)
             yield frame_tile

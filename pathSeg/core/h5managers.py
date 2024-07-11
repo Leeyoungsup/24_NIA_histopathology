@@ -11,10 +11,10 @@ import h5py
 import numpy as np
 from loguru import logger
 
-import pathml.core
-import pathml.core.masks
-import pathml.core.tile
-from pathml.core.utils import readcounts
+import pathSeg.core
+import pathSeg.core.masks
+import pathSeg.core.tile
+from pathSeg.core.utils import readcounts
 
 
 class h5pathManager:

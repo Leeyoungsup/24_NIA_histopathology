@@ -6,9 +6,9 @@ License: GNU GPL 2.0
 import reprlib
 from collections import OrderedDict
 
-import pathml.core.h5managers
-import pathml.core.masks
-import pathml.core.tile
+import pathSeg.core.h5managers
+import pathSeg.core.masks
+import pathSeg.core.tile
 
 
 class Tiles:
@@ -16,21 +16,21 @@ class Tiles:
     Object wrapping a dict of tiles.
 
     Args:
-        tiles (Union[dict[tuple[int], `~pathml.core.tiles.Tile`], list[`~pathml.core.tiles.Tile`]]): tile objects
+        tiles (Union[dict[tuple[int], `~pathSeg.core.tiles.Tile`], list[`~pathSeg.core.tiles.Tile`]]): tile objects
     """
 
     def __init__(self, h5manager, tiles=None):
-        assert isinstance(h5manager, pathml.core.h5managers.h5pathManager)
+        assert isinstance(h5manager, pathSeg.core.h5managers.h5pathManager)
         self.h5manager = h5manager
         # if tiles are supplied, add them to the h5manager
         if tiles:
             assert isinstance(tiles, list) and all(
-                [isinstance(tile, pathml.core.Tile) for tile in tiles]
-            ), f"tiles are of type {reprlib.repr([type(t) for t in tiles])} but must all be pathml.core.Tile"
+                [isinstance(tile, pathSeg.core.Tile) for tile in tiles]
+            ), f"tiles are of type {reprlib.repr([type(t) for t in tiles])} but must all be pathSeg.core.Tile"
 
             tiledictionary = {}
             for tile in tiles:
-                if not isinstance(tile, pathml.core.Tile):
+                if not isinstance(tile, pathSeg.core.Tile):
                     raise ValueError(
                         f"Tiles expects a list of type Tile but was given {type(tile)}"
                     )
@@ -70,9 +70,9 @@ class Tiles:
         Args:
             tile(Tile): tile object
         """
-        if not isinstance(tile, pathml.core.tile.Tile):
+        if not isinstance(tile, pathSeg.core.tile.Tile):
             raise ValueError(
-                f"can not add {type(tile)}, tile must be of type pathml.core.tiles.Tile"
+                f"can not add {type(tile)}, tile must be of type pathSeg.core.tiles.Tile"
             )
         self.h5manager.add_tile(tile)
 
@@ -81,7 +81,7 @@ class Tiles:
         Update a tile.
 
         Args:
-            tile(pathml.core.tile.Tiles): key of tile to be updated
+            tile(pathSeg.core.tile.Tiles): key of tile to be updated
         """
         self.h5manager.add_tile(tile)
 

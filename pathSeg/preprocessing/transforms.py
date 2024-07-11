@@ -14,9 +14,9 @@ from skimage import restoration
 from skimage.exposure import equalize_adapthist, equalize_hist, rescale_intensity
 from skimage.measure import regionprops_table
 
-import pathml.core
-import pathml.core.slide_data
-from pathml.utils import (
+import pathSeg.core
+import pathSeg.core.slide_data
+from pathSeg.utils import (
     RGB_to_GREY,
     RGB_to_HSI,
     RGB_to_HSV,

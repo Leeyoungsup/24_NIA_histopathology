@@ -5,8 +5,8 @@ License: GNU GPL 2.0
 
 import pickle
 
-import pathml.core.tile
-from pathml.preprocessing.transforms import Transform
+import pathSeg.core.tile
+from pathSeg.preprocessing.transforms import Transform
 
 
 class Pipeline(Transform):
@@ -15,13 +15,13 @@ class Pipeline(Transform):
 
     Args:
         transform_sequence (list): sequence of transforms to be consecutively applied.
-            List of `pathml.core.Transform` objects
+            List of `pathSeg.core.Transform` objects
     """
 
     def __init__(self, transform_sequence=None):
         assert transform_sequence is None or all(
             [isinstance(t, Transform) for t in transform_sequence]
-        ), "All elements in input list must be of type pathml.core.Transform"
+        ), "All elements in input list must be of type pathSeg.core.Transform"
         self.transforms = transform_sequence
 
     def __len__(self):
@@ -42,8 +42,8 @@ class Pipeline(Transform):
         # modifies the tile in place, but also returns the modified tile
         # need to do this for dask distributed
         assert isinstance(
-            tile, pathml.core.tile.Tile
-        ), f"argument of type {type(tile)} must be a pathml.core.Tile object."
+            tile, pathSeg.core.tile.Tile
+        ), f"argument of type {type(tile)} must be a pathSeg.core.Tile object."
         if self.transforms:
             for t in self.transforms:
                 t.apply(tile)

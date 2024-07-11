@@ -14,8 +14,8 @@ from skimage.segmentation import watershed
 from torch import nn
 from torch.nn import functional as F
 
-from pathml.ml.utils import center_crop_im_batch, dice_loss, get_sobel_kernels
-from pathml.utils import segmentation_lines
+from pathSeg.ml.utils import center_crop_im_batch, dice_loss, get_sobel_kernels
+from pathSeg.utils import segmentation_lines
 
 
 class _BatchNormRelu(nn.Module):
@@ -352,7 +352,7 @@ def _dice_loss_np_head(np_out, true_mask, epsilon=1e-3):
 
     true_mask = _convert_multiclass_mask_to_binary(true_mask)
     true_mask = true_mask.type(torch.long)
-    loss = dice_loss(logits=preds, true=true_mask, eps=epsilon)
+    loss = dice_loss(logits=preds.cpu(), true=true_mask.cpu(), eps=epsilon)
     return loss
 
 
@@ -369,7 +369,7 @@ def _dice_loss_nc_head(nc_out, true_mask, epsilon=1e-3):
         epsilon (float): Epsilon passed to ``dice_loss()``
     """
     truth = torch.argmax(true_mask, dim=1, keepdim=True).type(torch.long)
-    loss = dice_loss(logits=nc_out, true=truth, eps=epsilon)
+    loss = dice_loss(logits=nc_out.cpu(), true=truth.cpu(), eps=epsilon)
     return loss
 
 
@@ -592,9 +592,11 @@ def loss_hovernet(outputs, ground_truth, n_classes=None):
     # unpack outputs, and also calculate nucleus masks
     if n_classes is None:
         np_out, hv = outputs
+
         nucleus_mask = true_mask[:, 0, :, :] == 1
     else:
         np_out, hv, nc = outputs
+
         # in multiclass setting, last channel of masks indicates background, so
         # invert that to get a nucleus mask (Based on convention from PanNuke dataset)
         nucleus_mask = true_mask[:, -1, :, :] == 0
@@ -803,7 +805,6 @@ def post_process_batch_hovernet(
         )
         out_detection_list.append(preds)
     out_detection = np.stack(out_detection_list)
-
     if classification:
         # need to do last step of majority vote
         # get the pixel-level class predictions from the logits

@@ -8,7 +8,7 @@ from collections import OrderedDict
 
 import numpy as np
 
-import pathml.core.h5managers
+import pathSeg.core.h5managers
 
 
 class Masks:

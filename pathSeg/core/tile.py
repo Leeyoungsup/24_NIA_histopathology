@@ -11,7 +11,7 @@ import h5py
 import matplotlib.pyplot as plt
 import numpy as np
 
-import pathml.core.masks
+import pathSeg.core.masks
 
 
 class Tile:
@@ -29,8 +29,8 @@ class Tile:
             same shape as the tile.
         labels: labels belonging to tile
         counts (AnnData): counts matrix for the tile.
-        slide_type (pathml.core.SlideType, optional): slide type specification. Must be a
-            :class:`~pathml.core.SlideType` object. Alternatively, slide type can be specified by using the
+        slide_type (pathSeg.core.SlideType, optional): slide type specification. Must be a
+            :class:`~pathSeg.core.SlideType` object. Alternatively, slide type can be specified by using the
             parameters ``stain``, ``tma``, ``rgb``, ``volumetric``, and ``time_series``.
         stain (str, optional): Flag indicating type of slide stain. Must be one of [‘HE’, ‘IHC’, ‘Fluor’].
             Defaults to ``None``. Ignored if ``slide_type`` is specified.
@@ -94,8 +94,8 @@ class Tile:
         ), f"name is of type {type(name)} but must be of type str or None"
 
         assert slide_type is None or isinstance(
-            slide_type, (pathml.core.SlideType, h5py._hl.group.Group)
-        ), f"slide_type is of type {type(slide_type)} but must be of type pathml.core.types.SlideType"
+            slide_type, (pathSeg.core.SlideType, h5py._hl.group.Group)
+        ), f"slide_type is of type {type(slide_type)} but must be of type pathSeg.core.types.SlideType"
 
         # instantiate SlideType object if needed
         if not slide_type and any([stain, tma, rgb, volumetric, time_series]):
@@ -109,7 +109,7 @@ class Tile:
             # remove any Nones
             stain_type_dict = {key: val for key, val in stain_type_dict.items() if val}
             if stain_type_dict:
-                slide_type = pathml.core.slide_types.SlideType(**stain_type_dict)
+                slide_type = pathSeg.core.slide_types.SlideType(**stain_type_dict)
 
         assert counts is None or isinstance(
             counts, anndata.AnnData
