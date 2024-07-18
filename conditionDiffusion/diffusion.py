@@ -154,7 +154,7 @@ class GaussianDiffusion(nn.Module):
         """
         sample images from p_{theta}
         """
-        local_rank = get_rank()
+        local_rank = 0
         if local_rank == 0:
             print('Start generating...')
         if model_kwargs == None:
