@@ -20,6 +20,7 @@ from conditionDiffusion.utils import get_named_beta_schedule
 from conditionDiffusion.diffusion import GaussianDiffusion
 from conditionDiffusion.Scheduler import GradualWarmupScheduler
 from PIL import Image
+import torchvision
 print(f"GPUs used:\t{torch.cuda.device_count()}")
 device = torch.device("cuda",5)
 print(f"Device:\t\t{device}")
@@ -34,11 +35,11 @@ params={'image_size':1024,
         'epochs':1000,
         'n_classes':None,
         'data_path':'../../data/NIA/',
-        'image_count':3000,
+        'image_count':10000,
         'inch':3,
-        'modch':32,
+        'modch':64,
         'outch':3,
-        'chmul':[1,2,4,8,16,32,32],
+        'chmul':[1,2,4,8,16,16,16],
         'numres':2,
         'dtype':torch.float32,
         'cdim':10,
@@ -68,7 +69,10 @@ class CustomDataset(Dataset):
         self.images = images
         self.args=parmas
         self.label=label
-        
+        self.trans1 = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+        ])
     def trans(self,image):
         if random.random() > 0.5:
             transform = transforms.RandomHorizontalFlip(1)
@@ -81,7 +85,7 @@ class CustomDataset(Dataset):
         return image
     
     def __getitem__(self, index):
-        image=self.images[index]
+        image=self.trans1(Image.open(self.images[index]).convert('RGB').resize((params['image_size'],params['image_size'])))
         label=self.label[index]
         image = self.trans(image)
         return image,label
@@ -95,15 +99,13 @@ image_path=[]
 for i in tqdm(range(len(class_list))):
     image_list=glob(params['data_path']+class_list[i]+'/*.jpeg')
     if len(image_list)>params['image_count']:
-        image_list=random.sample(image_list, 3000)
+        image_list=random.sample(image_list, params['image_count'])
     for j in range(len(image_list)):
         image_path.append(image_list[j])
         image_label.append(i)
         
-train_images=torch.zeros((len(image_path),params['inch'],params['image_size'],params['image_size']))
-for i in tqdm(range(len(image_path))):
-    train_images[i]=trans(Image.open(image_path[i]).convert('RGB').resize((params['image_size'],params['image_size'])))
-train_dataset=CustomDataset(params,train_images,image_label)
+
+train_dataset=CustomDataset(params,image_path,image_label)
 dataloader=DataLoader(train_dataset,batch_size=params['batch_size'],shuffle=True)
 
 net = Unet(in_ch = params['inch'],
@@ -148,12 +150,12 @@ warmUpScheduler = GradualWarmupScheduler(
                         after_scheduler = cosineScheduler,
                         last_epoch = 0
                     )
-# checkpoint=torch.load(f'../../model/conditionDiff/details/BRNT/ckpt_101_checkpoint.pt',map_location=device)
+# checkpoint=torch.load(f'../../model/conditionDiff/ST/ckpt_1_checkpoint.pt',map_location=device)
 # diffusion.model.load_state_dict(checkpoint['net'])
 # cemblayer.load_state_dict(checkpoint['cemblayer'])
 # optimizer.load_state_dict(checkpoint['optimizer'])
 # warmUpScheduler.load_state_dict(checkpoint['scheduler'])
-
+topilimage = torchvision.transforms.ToPILImage()
 
 for epc in range(params['epochs']):
     diffusion.model.train()
@@ -187,7 +189,7 @@ for epc in range(params['epochs']):
         diffusion.model.eval()
         cemblayer.eval()
         all_samples = []
-        each_device_batch =len(class_list)*4
+        each_device_batch =len(class_list)
         with torch.no_grad():
             lab = torch.ones(len(class_list), each_device_batch // len(class_list)).type(torch.long) \
             * torch.arange(start = 0, end = len(class_list)).reshape(-1, 1)
@@ -199,12 +201,10 @@ for epc in range(params['epochs']):
                 generated = diffusion.ddim_sample(genshape, 50, 0, 'linear', cemb = cemb)
             else:
                 generated = diffusion.sample(genshape, cemb = cemb)
-            img = transback(generated)
-            img = img.reshape(len(class_list), each_device_batch // len(class_list), 3, params['image_size'], params['image_size']).contiguous()
-            all_samples.append(img)
-            samples = torch.concat(all_samples, dim = 1).reshape(each_device_batch, 3, params['image_size'], params['image_size'])
-
-        save_image(samples,f'../../result/ST/generated_{epc+1}_pict.png', nrow = each_device_batch // len(class_list))
+            generated=transback(generated)
+            for i in range(len(lab)):
+                img_pil = topilimage(generated[i].cpu())
+                img_pil.save(f'../../result/ST/{class_list[lab[i]]}/{epc}.png')
         # save checkpoints
         checkpoint = {
                             'net':diffusion.model.state_dict(),
