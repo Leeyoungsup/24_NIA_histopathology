@@ -37,9 +37,9 @@ params={'image_size':1024,
         'data_path':'../../data/NIA/',
         'image_count':10000,
         'inch':3,
-        'modch':64,
+        'modch':32,
         'outch':3,
-        'chmul':[1,2,4,8,16,16,16],
+        'chmul':[1,2,4,8,16,32,64],
         'numres':2,
         'dtype':torch.float32,
         'cdim':10,
@@ -64,8 +64,8 @@ def transback(data:Tensor) -> Tensor:
 
 class CustomDataset(Dataset):
     """COCO Custom Dataset compatible with torch.utils.data.DataLoader."""
-    def __init__(self,parmas, images,label):
-        
+    def __init__(self,parmas, images,label,count_list):
+        self.count_list=count_list
         self.images = images
         self.args=parmas
         self.label=label
@@ -85,27 +85,48 @@ class CustomDataset(Dataset):
         return image
     
     def __getitem__(self, index):
-        image=self.trans1(Image.open(self.images[index]).convert('RGB').resize((params['image_size'],params['image_size'])))
-        label=self.label[index]
-        image = self.trans(image)
+        if index//10000==0:
+            start=0
+            ind=random.randint(start,self.count_list[index//10000]-1)
+            image=self.trans1(Image.open(self.images[ind]).convert('RGB').resize((params['image_size'],params['image_size'])))
+            label=self.label[ind]
+            image = self.trans(image)
+        elif index//10000==1:
+            start=self.count_list[0] 
+            ind=random.randint(start,start+self.count_list[index//10000]-1)
+            image=self.trans1(Image.open(self.images[ind]).convert('RGB').resize((params['image_size'],params['image_size'])))
+            label=self.label[ind]
+            image = self.trans(image)
+        elif index//10000==2:
+            start=self.count_list[0]+self.count_list[1]
+            ind=random.randint(start,start+self.count_list[index//10000]-1)
+            image=self.trans1(Image.open(self.images[ind]).convert('RGB').resize((params['image_size'],params['image_size'])))
+            label=self.label[ind]
+        elif index//10000==3:
+            start=self.count_list[0]+self.count_list[1]+self.count_list[2]
+            ind=random.randint(start,start+self.count_list[index//10000]-1)
+            image=self.trans1(Image.open(self.images[ind]).convert('RGB').resize((params['image_size'],params['image_size'])))
+            label=self.label[ind]
+        
+        
         return image,label
     
     def __len__(self):
-        return len(self.images)
+        return 40000
 
 
 image_label=[]
 image_path=[]
+count_list=[]
 for i in tqdm(range(len(class_list))):
     image_list=glob(params['data_path']+class_list[i]+'/*.jpeg')
-    if len(image_list)>params['image_count']:
-        image_list=random.sample(image_list, params['image_count'])
+    count_list.append(len(image_list))
     for j in range(len(image_list)):
         image_path.append(image_list[j])
         image_label.append(i)
         
 
-train_dataset=CustomDataset(params,image_path,image_label)
+train_dataset=CustomDataset(params,image_path,image_label,count_list)
 dataloader=DataLoader(train_dataset,batch_size=params['batch_size'],shuffle=True)
 
 net = Unet(in_ch = params['inch'],
@@ -150,7 +171,7 @@ warmUpScheduler = GradualWarmupScheduler(
                         after_scheduler = cosineScheduler,
                         last_epoch = 0
                     )
-# checkpoint=torch.load(f'../../model/conditionDiff/ST/ckpt_1_checkpoint.pt',map_location=device)
+# checkpoint=torch.load(f'../../model/conditionDiff/ST/ckpt_2_checkpoint.pt',map_location=device)
 # diffusion.model.load_state_dict(checkpoint['net'])
 # cemblayer.load_state_dict(checkpoint['cemblayer'])
 # optimizer.load_state_dict(checkpoint['optimizer'])
@@ -185,26 +206,25 @@ for epc in range(params['epochs']):
                 }
             )
     warmUpScheduler.step()
-    if (epc) % 10 == 0:
-        diffusion.model.eval()
-        cemblayer.eval()
-        all_samples = []
-        each_device_batch =len(class_list)
-        with torch.no_grad():
-            lab = torch.ones(len(class_list), each_device_batch // len(class_list)).type(torch.long) \
-            * torch.arange(start = 0, end = len(class_list)).reshape(-1, 1)
-            lab = lab.reshape(-1, 1).squeeze()
-            lab = lab.to(device)
-            cemb = cemblayer(lab)
-            genshape = (each_device_batch , 3, params['image_size'], params['image_size'])
-            if params['ddim']:
-                generated = diffusion.ddim_sample(genshape, 50, 0, 'linear', cemb = cemb)
-            else:
-                generated = diffusion.sample(genshape, cemb = cemb)
-            generated=transback(generated)
-            for i in range(len(lab)):
-                img_pil = topilimage(generated[i].cpu())
-                img_pil.save(f'../../result/ST/{class_list[lab[i]]}/{epc}.png')
+    diffusion.model.eval()
+    cemblayer.eval()
+    all_samples = []
+    each_device_batch =len(class_list)
+    with torch.no_grad():
+        lab = torch.ones(len(class_list), each_device_batch // len(class_list)).type(torch.long) \
+        * torch.arange(start = 0, end = len(class_list)).reshape(-1, 1)
+        lab = lab.reshape(-1, 1).squeeze()
+        lab = lab.to(device)
+        cemb = cemblayer(lab)
+        genshape = (each_device_batch , 3, params['image_size'], params['image_size'])
+        if params['ddim']:
+            generated = diffusion.ddim_sample(genshape, 50, 0, 'linear', cemb = cemb)
+        else:
+            generated = diffusion.sample(genshape, cemb = cemb)
+        generated=transback(generated)
+        for i in range(len(lab)):
+            img_pil = topilimage(generated[i].cpu())
+            img_pil.save(f'../../result/ST/{class_list[lab[i]]}/{epc}.png')
         # save checkpoints
         checkpoint = {
                             'net':diffusion.model.state_dict(),
