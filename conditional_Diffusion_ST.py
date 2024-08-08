@@ -171,14 +171,14 @@ warmUpScheduler = GradualWarmupScheduler(
                         after_scheduler = cosineScheduler,
                         last_epoch = 0
                     )
-# checkpoint=torch.load(f'../../model/conditionDiff/ST/ckpt_2_checkpoint.pt',map_location=device)
-# diffusion.model.load_state_dict(checkpoint['net'])
-# cemblayer.load_state_dict(checkpoint['cemblayer'])
-# optimizer.load_state_dict(checkpoint['optimizer'])
-# warmUpScheduler.load_state_dict(checkpoint['scheduler'])
+checkpoint=torch.load(f'../../model/conditionDiff/ST/ckpt_9_checkpoint.pt',map_location=device)
+diffusion.model.load_state_dict(checkpoint['net'])
+cemblayer.load_state_dict(checkpoint['cemblayer'])
+optimizer.load_state_dict(checkpoint['optimizer'])
+warmUpScheduler.load_state_dict(checkpoint['scheduler'])
 topilimage = torchvision.transforms.ToPILImage()
 
-for epc in range(params['epochs']):
+for epc in range(9,params['epochs']):
     diffusion.model.train()
     cemblayer.train()
     total_loss=0
