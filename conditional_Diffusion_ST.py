@@ -171,14 +171,14 @@ warmUpScheduler = GradualWarmupScheduler(
                         after_scheduler = cosineScheduler,
                         last_epoch = 0
                     )
-checkpoint=torch.load(f'../../model/conditionDiff/ST/ckpt_9_checkpoint.pt',map_location=device)
+checkpoint=torch.load(f'../../model/conditionDiff/ST/ckpt_24_checkpoint.pt',map_location=device)
 diffusion.model.load_state_dict(checkpoint['net'])
 cemblayer.load_state_dict(checkpoint['cemblayer'])
 optimizer.load_state_dict(checkpoint['optimizer'])
 warmUpScheduler.load_state_dict(checkpoint['scheduler'])
 topilimage = torchvision.transforms.ToPILImage()
-
-for epc in range(9,params['epochs']):
+scaler = torch.cuda.amp.GradScaler()
+for epc in range(24,params['epochs']):
     diffusion.model.train()
     cemblayer.train()
     total_loss=0
@@ -186,14 +186,16 @@ for epc in range(9,params['epochs']):
     with tqdm(dataloader, dynamic_ncols=True) as tqdmDataLoader:
         for img, lab in tqdmDataLoader:
             b = img.shape[0]
-            optimizer.zero_grad()
+            
             x_0 = img.to(device)
             lab = lab.to(device)
             cemb = cemblayer(lab)
             cemb[np.where(np.random.rand(b)<params['threshold'])] = 0
             loss = diffusion.trainloss(x_0, cemb = cemb)
-            loss.backward()
-            optimizer.step()
+            optimizer.zero_grad(set_to_none=True)
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
             steps+=1
             total_loss+=loss.item()
             tqdmDataLoader.set_postfix(
