@@ -27,11 +27,11 @@ print(f"Device:\t\t{device}")
 import pytorch_model_summary as tms
 
 class_list=['STNT','STMX','STIN','STDI']
-params={'image_size':1024,
+params={'image_size':512,
         'lr':1e-5,
         'beta1':0.5,
         'beta2':0.999,
-        'batch_size':1,
+        'batch_size':4,
         'epochs':1000,
         'n_classes':None,
         'data_path':'../../data/NIA/',
@@ -171,14 +171,15 @@ warmUpScheduler = GradualWarmupScheduler(
                         after_scheduler = cosineScheduler,
                         last_epoch = 0
                     )
-checkpoint=torch.load(f'../../model/conditionDiff/ST/ckpt_24_checkpoint.pt',map_location=device)
-diffusion.model.load_state_dict(checkpoint['net'])
-cemblayer.load_state_dict(checkpoint['cemblayer'])
-optimizer.load_state_dict(checkpoint['optimizer'])
-warmUpScheduler.load_state_dict(checkpoint['scheduler'])
+# checkpoint=torch.load(f'../../model/conditionDiff/ST/ckpt_26_checkpoint.pt',map_location=device)
+# diffusion.model.load_state_dict(checkpoint['net'])
+# cemblayer.load_state_dict(checkpoint['cemblayer'])
+# optimizer.load_state_dict(checkpoint['optimizer'])
+# warmUpScheduler.load_state_dict(checkpoint['scheduler'])
+# checkpoint=0
 topilimage = torchvision.transforms.ToPILImage()
 scaler = torch.cuda.amp.GradScaler()
-for epc in range(24,params['epochs']):
+for epc in range(params['epochs']):
     diffusion.model.train()
     cemblayer.train()
     total_loss=0
