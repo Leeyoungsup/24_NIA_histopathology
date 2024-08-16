@@ -131,7 +131,7 @@ discriminator = stylegan.Discriminator(
 
 
 # Generator와 Discriminator의 학습률(Learning rate) 설정
-lr = 2e-5
+lr = 2e-4
 
 # Beta1과 Beta2는 일반적으로 0.0과 0.99로 설정됩니다.
 beta1 = 0.0
@@ -186,8 +186,13 @@ def train_generator_loss(generator, discriminator, z, labels, pl_weight, pl_mean
 
     return g_loss_val.mean()
 
-
-for epc in range(params['epochs']):
+checkpoint=torch.load(f'../../model/styleGan2/STNT/checkpoint_epoch_118.pt',map_location=device)
+generator.load_state_dict(checkpoint['generator_state_dict'])
+discriminator.load_state_dict(checkpoint['discriminator_state_dict'])
+g_optimizer.load_state_dict(checkpoint['g_optimizer_state_dict'])
+d_optimizer.load_state_dict(checkpoint['d_optimizer_state_dict'])
+checkpoint=0
+for epc in range(118,params['epochs']):
     gloss_total = 0
     dloss_total = 0
     step = 0
