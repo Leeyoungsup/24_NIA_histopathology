@@ -29,7 +29,8 @@ device = torch.device("cuda",4)
 print(f"Device:\t\t{device}")
 import pytorch_model_summary as tms
 import styleGAN.networks_stylegan2 as stylegan
-class_list=['유형1','유형2']
+# class_list=['유형1','유형2','유형3','유형4','유형5','유형6','유형7','유형8','유형9','유형10','유형11','유형12','유형13','유형14']
+class_list=['STNT','STDI','STMX','STIN']
 params={'image_size':512,
         'lr':1e-5,
         'beta1':0.5,
@@ -37,7 +38,7 @@ params={'image_size':512,
         'batch_size':1,
         'epochs':1000,
         'n_classes':None,
-        'data_path':'../../data/origin_type/STNT/',
+        'data_path':'../../data/NIA/',
         'image_count':5000,
         'inch':3,
         'modch':64,
@@ -65,14 +66,45 @@ trans = transforms.Compose([
 def transback(data:Tensor) -> Tensor:
     return data / 2 + 0.5
 
+# class CustomDataset(Dataset):
+#     """COCO Custom Dataset compatible with torch.utils.data.DataLoader."""
+#     def __init__(self,parmas, images,label):
+        
+#         self.images = images
+#         self.args=parmas
+#         self.label=label
+        
+#     def trans(self,image):
+#         if random.random() > 0.5:
+#             transform = transforms.RandomHorizontalFlip(1)
+#             image = transform(image)
+            
+#         if random.random() > 0.5:
+#             transform = transforms.RandomVerticalFlip(1)
+#             image = transform(image)
+            
+#         return image
+    
+#     def __getitem__(self, index):
+#         image=self.images[index]
+#         label=self.label[index]
+#         image = self.trans(image)
+#         return image,label
+    
+#     def __len__(self):
+#         return len(self.images)
+
 class CustomDataset(Dataset):
     """COCO Custom Dataset compatible with torch.utils.data.DataLoader."""
-    def __init__(self,parmas, images,label):
-        
+    def __init__(self,parmas, images,label,count_list):
+        self.count_list=count_list
         self.images = images
         self.args=parmas
         self.label=label
-        
+        self.trans1 = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+        ])
     def trans(self,image):
         if random.random() > 0.5:
             transform = transforms.RandomHorizontalFlip(1)
@@ -85,40 +117,67 @@ class CustomDataset(Dataset):
         return image
     
     def __getitem__(self, index):
-        image=self.images[index]
-        label=self.label[index]
-        image = self.trans(image)
+        if index//10000==0:
+            start=0
+            ind=random.randint(start,self.count_list[index//10000]-1)
+            image=self.trans1(Image.open(self.images[ind]).convert('RGB').resize((params['image_size'],params['image_size'])))
+            label=self.label[ind]
+            image = self.trans(image)
+        elif index//10000==1:
+            start=self.count_list[0] 
+            ind=random.randint(start,start+self.count_list[index//10000]-1)
+            image=self.trans1(Image.open(self.images[ind]).convert('RGB').resize((params['image_size'],params['image_size'])))
+            label=self.label[ind]
+            image = self.trans(image)
+        elif index//10000==2:
+            start=self.count_list[0]+self.count_list[1]
+            ind=random.randint(start,start+self.count_list[index//10000]-1)
+            image=self.trans1(Image.open(self.images[ind]).convert('RGB').resize((params['image_size'],params['image_size'])))
+            label=self.label[ind]
+        elif index//10000==3:
+            start=self.count_list[0]+self.count_list[1]+self.count_list[2]
+            ind=random.randint(start,start+self.count_list[index//10000]-1)
+            image=self.trans1(Image.open(self.images[ind]).convert('RGB').resize((params['image_size'],params['image_size'])))
+            label=self.label[ind]
+        
+        
         return image,label
     
     def __len__(self):
-        return len(self.images)
+        return 40000
 
 
-image_label=[]
+image_count=[]
 image_path=[]
 for i in tqdm(range(len(class_list))):
     image_list=glob(params['data_path']+class_list[i]+'/*.jpeg')
     for j in range(len(image_list)):
         image_path.append(image_list[j])
-        image_label.append(i)
-        
-train_images=torch.zeros((len(image_path),params['inch'],params['image_size'],params['image_size']))
-for i in tqdm(range(len(image_path))):
-    train_images[i]=trans(Image.open(image_path[i]).convert('RGB').resize((params['image_size'],params['image_size'])))
-train_dataset=CustomDataset(params,train_images,F.one_hot(torch.tensor(image_label)))
+    image_count.append(len(image_list))
+image_label=torch.zeros((sum(image_count),14))
+count=0
+for i in range(len(image_count)):
+    for j in range(image_count[i]):
+        image_label[count][i]=1
+        count+=1
+
+# train_images=torch.zeros((len(image_path),params['inch'],params['image_size'],params['image_size']))
+# for i in tqdm(range(len(image_path))):
+#     train_images[i]=trans(Image.open(image_path[i]).convert('RGB').resize((params['image_size'],params['image_size'])))
+train_dataset=CustomDataset(params,image_path,image_label,image_count)
 dataloader=DataLoader(train_dataset,batch_size=params['batch_size'],shuffle=True)
 
 
 generator = stylegan.Generator(
     z_dim=1024,  # Input latent (Z) dimensionality
-    c_dim=len(class_list),    # Conditioning label (C) dimensionality (0 = no labels)
+    c_dim=14,    # Conditioning label (C) dimensionality (0 = no labels)
     w_dim=512,  # Intermediate latent (W) dimensionality
     img_resolution=params['image_size'],  # Output resolution
     img_channels=3,       # Number of output color channels (3 for RGB)
 ).to(device)
 
 discriminator = stylegan.Discriminator(
-    c_dim=len(class_list),              # Conditioning label (C) dimensionality (0 = no labels)
+    c_dim=14,              # Conditioning label (C) dimensionality (0 = no labels)
     img_resolution=params['image_size'],  # Input resolution
     img_channels=3,       # Number of input color channels (3 for RGB)
     architecture='resnet',# Architecture: 'orig', 'skip', 'resnet'
@@ -131,17 +190,16 @@ discriminator = stylegan.Discriminator(
 
 
 # Generator와 Discriminator의 학습률(Learning rate) 설정
-lr = 2e-4
 
 # Beta1과 Beta2는 일반적으로 0.0과 0.99로 설정됩니다.
 beta1 = 0.0
 beta2 = 0.99
 
 # Generator Optimizer
-g_optimizer = optim.Adam(generator.parameters(), lr=lr, betas=(beta1, beta2))
+g_optimizer = optim.Adam(generator.parameters(), lr=2e-5, betas=(beta1, beta2))
 
 # Discriminator Optimizer
-d_optimizer = optim.Adam(discriminator.parameters(), lr=lr, betas=(beta1, beta2))
+d_optimizer = optim.Adam(discriminator.parameters(), lr=2e-4, betas=(beta1, beta2))
 
 def train_discriminator_loss(discriminator, generator, real_images, labels, z, device, r1_gamma, blur_init_sigma, blur_fade_kimg, augment_pipe, cur_nimg):
     # 진짜와 가짜 이미지에 대한 예측
@@ -186,16 +244,22 @@ def train_generator_loss(generator, discriminator, z, labels, pl_weight, pl_mean
 
     return g_loss_val.mean()
 
-checkpoint=torch.load(f'../../model/styleGan2/STNT/checkpoint_epoch_118.pt',map_location=device)
+checkpoint=torch.load(f'../../model/styleGan2/STNT/checkpoint_epoch_1.pt',map_location=device)
 generator.load_state_dict(checkpoint['generator_state_dict'])
 discriminator.load_state_dict(checkpoint['discriminator_state_dict'])
 g_optimizer.load_state_dict(checkpoint['g_optimizer_state_dict'])
 d_optimizer.load_state_dict(checkpoint['d_optimizer_state_dict'])
+
 checkpoint=0
-for epc in range(118,params['epochs']):
+
+r1_gamma = 10  # R1 정규화 강도를 더 낮춤
+pl_weight = 1.0  # Path Length 정규화 강도를 크게 낮춤
+for epc in range(1,params['epochs']):
     gloss_total = 0
     dloss_total = 0
     step = 0
+    generator.train()
+    discriminator.train()
     with tqdm(dataloader, dynamic_ncols=True) as tqdmDataLoader:
         for img, lab in tqdmDataLoader:
             real_images = img.to(device)
@@ -215,7 +279,7 @@ for epc in range(118,params['epochs']):
                 labels=labels, 
                 z=z, 
                 device=device, 
-                r1_gamma=10, 
+                r1_gamma=r1_gamma,  # R1 정규화 강도 적용
                 blur_init_sigma=0, 
                 blur_fade_kimg=1000, 
                 augment_pipe=None, 
@@ -234,7 +298,7 @@ for epc in range(118,params['epochs']):
                 discriminator=discriminator, 
                 z=z, 
                 labels=labels, 
-                pl_weight=2.0, 
+                pl_weight=pl_weight,  # Path Length 정규화 강도 적용
                 pl_mean=torch.zeros([]).to(device), 
                 pl_decay=0.01, 
                 pl_no_weight_grad=False
@@ -260,7 +324,7 @@ for epc in range(118,params['epochs']):
     with torch.no_grad():
         for cls_idx, cls_name in enumerate(class_list):
             z = torch.randn(1, 1024, device=device)
-            labels = torch.zeros((1, len(class_list)), device=device)
+            labels = torch.zeros((1, 14), device=device)
             labels[0, cls_idx] = 1
             generated_images = generator(z, labels)
             save_image(transback(generated_images), f'../../result/styleGan2/STNT/{cls_name}/generated_images_epoch_{epc+1}.png', nrow=4)
