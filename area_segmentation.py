@@ -104,7 +104,8 @@ class CustomDataset(Dataset):
         return len(self.img_path)
 
     def __getitem__(self, idx):
-        image_path, label_path = self.img_path[idx], self.label[idx]
+        image_path, label_path = self.trans(
+            self.img_path[idx], self.label[idx])
 
         return image_path, label_path
 
