@@ -181,7 +181,7 @@ warmUpScheduler = GradualWarmupScheduler(
     last_epoch=0
 )
 checkpoint = torch.load(
-    f'../../model/conditionDiff/ST/ckpt_26_checkpoint.pt', map_location=device)
+    f'../../model/conditionDiff/ST/ckpt_28_checkpoint.pt', map_location=device)
 diffusion.model.load_state_dict(checkpoint['net'])
 cemblayer.load_state_dict(checkpoint['cemblayer'])
 optimizer.load_state_dict(checkpoint['optimizer'])
@@ -189,7 +189,7 @@ warmUpScheduler.load_state_dict(checkpoint['scheduler'])
 checkpoint = 0
 topilimage = torchvision.transforms.ToPILImage()
 scaler = torch.cuda.amp.GradScaler()
-for epc in range(26, params['epochs']):
+for epc in range(28, params['epochs']):
     diffusion.model.train()
     cemblayer.train()
     total_loss = 0
