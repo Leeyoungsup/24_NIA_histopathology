@@ -314,7 +314,7 @@ def normalize_matrix_cols(A):
     return A / np.linalg.norm(A, axis=0)[None, :]
 
 
-def plot_segmentation(ax, masks, palette=None, markersize=5):
+def plot_segmentation(ax, masks, palette=None, markersize=1):
     """
     Plot segmentation contours. Supports multi-class masks.
 
