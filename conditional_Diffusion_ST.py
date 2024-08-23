@@ -48,7 +48,7 @@ params = {'image_size': 1024,
           'T': 1000,
           'w': 1.8,
           'v': 0.3,
-          'multiplier': 2.5,
+          'multiplier': 2,
           'threshold': 0.1,
           'ddim': True,
           }
@@ -109,12 +109,14 @@ class CustomDataset(Dataset):
             image = self.trans1(Image.open(self.images[ind]).convert(
                 'RGB').resize((params['image_size'], params['image_size'])))
             label = self.label[ind]
+            image = self.trans(image)
         elif index//10000 == 3:
             start = self.count_list[0]+self.count_list[1]+self.count_list[2]
             ind = random.randint(start, start+self.count_list[index//10000]-1)
             image = self.trans1(Image.open(self.images[ind]).convert(
                 'RGB').resize((params['image_size'], params['image_size'])))
             label = self.label[ind]
+            image = self.trans(image)
 
         return image, label
 
@@ -167,29 +169,24 @@ optimizer = torch.optim.AdamW(
     weight_decay=1e-4
 )
 
-cosineScheduler = optim.lr_scheduler.CosineAnnealingLR(
-    optimizer=optimizer,
-    T_max=params['epochs']/100,
-    eta_min=0,
-    last_epoch=-1
-)
+cosineScheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
 warmUpScheduler = GradualWarmupScheduler(
-    optimizer=optimizer,
-    multiplier=params['multiplier'],
-    warm_epoch=params['epochs'] // 10,
-    after_scheduler=cosineScheduler,
-    last_epoch=0
-)
+                        optimizer = optimizer,
+                        multiplier = params['multiplier'],
+                        warm_epoch = 2,
+                        after_scheduler = cosineScheduler,
+                        last_epoch = 0
+                    )
 checkpoint = torch.load(
-    f'../../model/conditionDiff/ST/ckpt_28_checkpoint.pt', map_location=device)
+    f'../../model/conditionDiff/ST/ckpt_34_checkpoint.pt', map_location=device)
 diffusion.model.load_state_dict(checkpoint['net'])
 cemblayer.load_state_dict(checkpoint['cemblayer'])
-optimizer.load_state_dict(checkpoint['optimizer'])
-warmUpScheduler.load_state_dict(checkpoint['scheduler'])
+# optimizer.load_state_dict(checkpoint['optimizer'])
+# warmUpScheduler.load_state_dict(checkpoint['scheduler'])
 checkpoint = 0
 topilimage = torchvision.transforms.ToPILImage()
 scaler = torch.cuda.amp.GradScaler()
-for epc in range(28, params['epochs']):
+for epc in range(34, params['epochs']):
     diffusion.model.train()
     cemblayer.train()
     total_loss = 0
