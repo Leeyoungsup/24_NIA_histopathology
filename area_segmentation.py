@@ -1,6 +1,5 @@
-import matplotlib.pyplot as plt
+
 import numpy as np
-import helper
 import time
 import datetime
 import torch.nn as nn
@@ -34,8 +33,8 @@ import torch
 import torch.nn as nn
 from timm import create_model
 import cv2
-device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
-batch_size = 4
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+batch_size = 1
 img_size = 1024
 class_list = ['NT_epithelial', 'NT_immune',
               'NT_stroma', 'TP_in_situ', 'TP_invasive']

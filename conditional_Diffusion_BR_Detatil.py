@@ -25,7 +25,7 @@ import torchvision
 print(f"GPUs used:\t{torch.cuda.device_count()}")
 device = torch.device("cuda", 5)
 print(f"Device:\t\t{device}")
-class_list = ['유형3', '유형4']
+class_list = ['유형8', '유형9']
 params = {'image_size': 1024,
           'lr': 2e-5,
           'beta1': 0.5,
@@ -33,7 +33,7 @@ params = {'image_size': 1024,
           'batch_size': 2,
           'epochs': 1000,
           'n_classes': None,
-          'data_path': '../../data/normalization_type/BRLC/',
+          'data_path': '../../data/normalization_type/BRIL/',
           'image_count': 5000,
           'inch': 3,
           'modch': 32,
@@ -147,8 +147,12 @@ warmUpScheduler = GradualWarmupScheduler(
     after_scheduler=cosineScheduler,
     last_epoch=0
 )
-# checkpoint=torch.load(f'../../model/conditionDiff/BR/ckpt_35_checkpoint.pt',map_location=device)
-# diffusion.model.load_state_dict(checkpoint['net'])
+checkpoint = torch.load(
+    f'../../model/conditionDiff/BR/ckpt_35_checkpoint.pt', map_location=device)
+diffusion.model.load_state_dict(checkpoint['net'])
+# cemblayer.load_state_dict(checkpoint['cemblayer'])
+# optimizer.load_state_dict(checkpoint['optimizer'])
+# warmUpScheduler.load_state_dict(checkpoint['scheduler'])
 
 checkpoint = 0
 
@@ -209,7 +213,7 @@ for epc in range(params['epochs']):
         for i in range(len(lab)):
             img_pil = topilimage(generated[i].cpu())
             img_pil.save(
-                f'../../result/Detail/BRLC/{class_list[lab[i]]}/{epc}.png')
+                f'../../result/Detail/BRIL/{class_list[lab[i]]}/{epc}.png')
 
         # save checkpoints
         checkpoint = {
@@ -218,6 +222,7 @@ for epc in range(params['epochs']):
             'optimizer': optimizer.state_dict(),
             'scheduler': warmUpScheduler.state_dict()
         }
-    torch.save(
-        checkpoint, f'../../model/conditionDiff/details/BRLC/ckpt_{epc+1}_checkpoint.pt')
+    if epc % 5 == 0:
+        torch.save(
+            checkpoint, f'../../model/conditionDiff/details/BRIL/ckpt_{epc+1}_checkpoint.pt')
     torch.cuda.empty_cache()
