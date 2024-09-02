@@ -23,22 +23,22 @@ from conditionDiffusion.Scheduler import GradualWarmupScheduler
 from PIL import Image
 import torchvision
 print(f"GPUs used:\t{torch.cuda.device_count()}")
-device = torch.device("cuda", 5)
+device = torch.device("cuda", 4)
 print(f"Device:\t\t{device}")
-class_list = ['유형8', '유형9']
-params = {'image_size': 1024,
+class_list = ['유형3', '유형4', '유형5', '유형6', '유형7', '유형8', '유형9']
+params = {'image_size': 512,
           'lr': 2e-5,
           'beta1': 0.5,
           'beta2': 0.999,
-          'batch_size': 2,
+          'batch_size': 3,
           'epochs': 1000,
           'n_classes': None,
-          'data_path': '../../data/normalization_type/BRIL/',
+          'data_path': '../../data/normalization_type/BR/',
           'image_count': 5000,
           'inch': 3,
-          'modch': 32,
+          'modch': 128,
           'outch': 3,
-          'chmul': [1, 2, 4, 8, 16, 32, 64],
+          'chmul': [1, 2, 4, 8, 16],
           'numres': 2,
           'dtype': torch.float32,
           'cdim': 10,
@@ -48,7 +48,7 @@ params = {'image_size': 1024,
           'w': 1.8,
           'v': 0.3,
           'multiplier': 1,
-          'threshold': 0.1,
+          'threshold': 0.02,
           'ddim': True,
           }
 trans = transforms.Compose([
@@ -143,13 +143,13 @@ cosineScheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
 warmUpScheduler = GradualWarmupScheduler(
     optimizer=optimizer,
     multiplier=params['multiplier'],
-    warm_epoch=10,
+    warm_epoch=100,
     after_scheduler=cosineScheduler,
     last_epoch=0
 )
-checkpoint = torch.load(
-    f'../../model/conditionDiff/BR/ckpt_35_checkpoint.pt', map_location=device)
-diffusion.model.load_state_dict(checkpoint['net'])
+# checkpoint = torch.load(
+#     f'../../model/conditionDiff/scratch_details/BRDC/ckpt_31_checkpoint.pt', map_location=device)
+# diffusion.model.load_state_dict(checkpoint['net'])
 # cemblayer.load_state_dict(checkpoint['cemblayer'])
 # optimizer.load_state_dict(checkpoint['optimizer'])
 # warmUpScheduler.load_state_dict(checkpoint['scheduler'])
@@ -170,7 +170,6 @@ for epc in range(params['epochs']):
             x_0 = img.to(device)
             lab = lab.to(device)
             cemb = cemblayer(lab)
-            cemb[np.where(np.random.rand(b) < params['threshold'])] = 0
             loss = diffusion.trainloss(x_0, cemb=cemb)
             optimizer.zero_grad(set_to_none=True)
             scaler.scale(loss).backward()
@@ -206,14 +205,14 @@ for epc in range(params['epochs']):
                     params['image_size'], params['image_size'])
         if params['ddim']:
             generated = diffusion.ddim_sample(
-                genshape, 100, 0.5, 'quadratic', cemb=cemb)
+                genshape, 100, 0.1, 'quadratic', cemb=cemb)
         else:
             generated = diffusion.sample(genshape, cemb=cemb)
         generated = transback(generated)
         for i in range(len(lab)):
             img_pil = topilimage(generated[i].cpu())
             img_pil.save(
-                f'../../result/Detail/BRIL/{class_list[lab[i]]}/{epc}.png')
+                f'../../result/scratch_Detail/BR/{class_list[lab[i]]}/{epc}.png')
 
         # save checkpoints
         checkpoint = {
@@ -224,5 +223,5 @@ for epc in range(params['epochs']):
         }
     if epc % 5 == 0:
         torch.save(
-            checkpoint, f'../../model/conditionDiff/details/BRIL/ckpt_{epc+1}_checkpoint.pt')
+            checkpoint, f'../../model/conditionDiff/scratch_details/BR/ckpt_{epc+1}_checkpoint.pt')
     torch.cuda.empty_cache()
