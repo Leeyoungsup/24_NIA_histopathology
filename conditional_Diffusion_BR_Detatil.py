@@ -25,20 +25,35 @@ import torchvision
 print(f"GPUs used:\t{torch.cuda.device_count()}")
 device = torch.device("cuda", 4)
 print(f"Device:\t\t{device}")
-class_list = ['유형3', '유형4', '유형5', '유형6', '유형7', '유형8', '유형9']
-params = {'image_size': 512,
+
+
+def createDirectory(directory):
+    """_summary_
+        create Directory
+    Args:
+        directory (string): file_path
+    """
+    try:
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+    except OSError:
+        print("Error: Failed to create the directory.")
+
+
+class_list = ['유형10', '유형11', '유형12', '유형13', '유형14', '유형15']
+params = {'image_size': 1024,
           'lr': 2e-5,
           'beta1': 0.5,
           'beta2': 0.999,
-          'batch_size': 3,
+          'batch_size': 1,
           'epochs': 1000,
           'n_classes': None,
-          'data_path': '../../data/normalization_type/BR/',
+          'data_path': '../../data/origin_type/BRID/',
           'image_count': 5000,
-          'inch': 3,
+          'inch': 1,
           'modch': 128,
-          'outch': 3,
-          'chmul': [1, 2, 4, 8, 16],
+          'outch': 1,
+          'chmul': [1, 2, 2, 4, 4, 8],
           'numres': 2,
           'dtype': torch.float32,
           'cdim': 10,
@@ -51,10 +66,7 @@ params = {'image_size': 512,
           'threshold': 0.02,
           'ddim': True,
           }
-trans = transforms.Compose([
-    transforms.ToTensor(),
-    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-])
+tf = transforms.ToTensor()
 
 
 def transback(data: Tensor) -> Tensor:
@@ -102,8 +114,8 @@ for i in tqdm(range(len(class_list))):
 train_images = torch.zeros(
     (len(image_path), params['inch'], params['image_size'], params['image_size']))
 for i in tqdm(range(len(image_path))):
-    train_images[i] = trans(Image.open(image_path[i]).convert(
-        'RGB').resize((params['image_size'], params['image_size'])))
+    train_images[i] = tf(Image.open(image_path[i]).convert(
+        'L').resize((params['image_size'], params['image_size'])))*2-1
 train_dataset = CustomDataset(params, train_images, image_label)
 dataloader = DataLoader(
     train_dataset, batch_size=params['batch_size'], shuffle=True)
@@ -148,7 +160,7 @@ warmUpScheduler = GradualWarmupScheduler(
     last_epoch=0
 )
 # checkpoint = torch.load(
-#     f'../../model/conditionDiff/scratch_details/BRDC/ckpt_31_checkpoint.pt', map_location=device)
+#     f'../../model/conditionDiff/scratch_scratch_details/BRID/ckpt_31_checkpoint.pt', map_location=device)
 # diffusion.model.load_state_dict(checkpoint['net'])
 # cemblayer.load_state_dict(checkpoint['cemblayer'])
 # optimizer.load_state_dict(checkpoint['optimizer'])
@@ -201,7 +213,7 @@ for epc in range(params['epochs']):
         lab = lab.reshape(-1, 1).squeeze()
         lab = lab.to(device)
         cemb = cemblayer(lab)
-        genshape = (each_device_batch, 3,
+        genshape = (each_device_batch, params['outch'],
                     params['image_size'], params['image_size'])
         if params['ddim']:
             generated = diffusion.ddim_sample(
@@ -211,8 +223,10 @@ for epc in range(params['epochs']):
         generated = transback(generated)
         for i in range(len(lab)):
             img_pil = topilimage(generated[i].cpu())
+            createDirectory(
+                f'../../result/scratch_Detail/BRID/{class_list[lab[i]]}')
             img_pil.save(
-                f'../../result/scratch_Detail/BR/{class_list[lab[i]]}/{epc}.png')
+                f'../../result/scratch_Detail/BRID/{class_list[lab[i]]}/{epc}.png')
 
         # save checkpoints
         checkpoint = {
@@ -222,6 +236,7 @@ for epc in range(params['epochs']):
             'scheduler': warmUpScheduler.state_dict()
         }
     if epc % 5 == 0:
+        createDirectory(f'../../model/conditionDiff/scratch_details/BRID/')
         torch.save(
-            checkpoint, f'../../model/conditionDiff/scratch_details/BR/ckpt_{epc+1}_checkpoint.pt')
+            checkpoint, f'../../model/conditionDiff/scratch_details/BRID/ckpt_{epc+1}_checkpoint.pt')
     torch.cuda.empty_cache()
