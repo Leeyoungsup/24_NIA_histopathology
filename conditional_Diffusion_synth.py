@@ -24,7 +24,7 @@ from PIL import Image
 import torchvision
 import torch.nn as nn
 print(f"GPUs used:\t{torch.cuda.device_count()}")
-device = torch.device("cuda", 0)
+device = torch.device("cuda", 6)
 device1 = torch.device("cuda", 5)
 print(f"Device:\t\t{device}")
 
@@ -50,7 +50,7 @@ params = {'image_size': 1024,
           'batch_size': 1,
           'epochs': 1000,
           'n_classes': None,
-          'data_path': '../../data/origin_type/BRNT/',
+          'data_path': '../../result/synth/BRNT/',
           'image_count': 5000,
           'inch': 1,
           'modch': 128,
@@ -73,36 +73,6 @@ tf = transforms.ToTensor()
 
 def transback(data: Tensor) -> Tensor:
     return data / 2 + 0.5
-
-
-class CustomDataset(Dataset):
-    """COCO Custom Dataset compatible with torch.utils.data.DataLoader."""
-
-    def __init__(self, parmas, images, label):
-
-        self.images = images
-        self.args = parmas
-        self.label = label
-
-    def trans(self, image):
-        if random.random() > 0.5:
-            transform = transforms.RandomHorizontalFlip(1)
-            image = transform(image)
-
-        if random.random() > 0.5:
-            transform = transforms.RandomVerticalFlip(1)
-            image = transform(image)
-
-        return image
-
-    def __getitem__(self, index):
-        image = self.images[index]
-        label = self.label[index]
-        image = self.trans(image)
-        return image, label
-
-    def __len__(self):
-        return len(self.images)
 
 
 class UNetDown(nn.Module):
@@ -206,23 +176,6 @@ class GeneratorUNet(nn.Module):
         return self.final(u7)
 
 
-image_label = []
-image_path = []
-for i in tqdm(range(len(class_list))):
-    image_list = glob(params['data_path']+class_list[i]+'/*.jpeg')
-    for j in range(len(image_list)):
-        image_path.append(image_list[j])
-        image_label.append(i)
-
-train_images = torch.zeros(
-    (len(image_path), params['inch'], params['image_size'], params['image_size']))
-for i in tqdm(range(len(image_path))):
-    train_images[i] = tf(Image.open(image_path[i]).convert(
-        'L').resize((params['image_size'], params['image_size'])))*2-1
-train_dataset = CustomDataset(params, train_images, image_label)
-dataloader = DataLoader(
-    train_dataset, batch_size=params['batch_size'], shuffle=True)
-
 net = Unet(in_ch=params['inch'],
            mod_ch=params['modch'],
            out_ch=params['outch'],
@@ -262,61 +215,35 @@ warmUpScheduler = GradualWarmupScheduler(
     after_scheduler=cosineScheduler,
     last_epoch=0
 )
-# checkpoint = torch.load(
-#     f'../../model/conditionDiff/scratch_details/BRNT/ckpt_11_checkpoint.pt', map_location=device)
-# diffusion.model.load_state_dict(checkpoint['net'])
-# cemblayer.load_state_dict(checkpoint['cemblayer'])
-# optimizer.load_state_dict(checkpoint['optimizer'])
-# warmUpScheduler.load_state_dict(checkpoint['scheduler'])
+checkpoint = torch.load(
+    f'../../model/conditionDiff/scratch_details/BRNT/ckpt_66_checkpoint.pt', map_location=device)
+diffusion.model.load_state_dict(checkpoint['net'])
+cemblayer.load_state_dict(checkpoint['cemblayer'])
+optimizer.load_state_dict(checkpoint['optimizer'])
+warmUpScheduler.load_state_dict(checkpoint['scheduler'])
 
 
 generator = GeneratorUNet()
 generator.to(device1)
 generator.load_state_dict(torch.load(
-    '../../model/colorization/pix2pix/Pix2Pix_Generator_for_Colorization_176.pt', map_location=device1))
+    '../../model/colorization/pix2pix/Pix2Pix_Generator_for_Colorization_159.pt', map_location=device1))
 
 
 checkpoint = 0
 
 scaler = torch.cuda.amp.GradScaler()
 topilimage = torchvision.transforms.ToPILImage()
-for epc in range(params['epochs']):
-    diffusion.model.train()
-    cemblayer.train()
-    total_loss = 0
-    steps = 0
-    with tqdm(dataloader, dynamic_ncols=True) as tqdmDataLoader:
-        for img, lab in tqdmDataLoader:
-            b = img.shape[0]
+diffusion.model.eval()
+cemblayer.eval()
 
-            x_0 = img.to(device)
-            lab = lab.to(device)
-            cemb = cemblayer(lab)
-            loss = diffusion.trainloss(x_0, cemb=cemb)
-            optimizer.zero_grad(set_to_none=True)
-            scaler.scale(loss).backward()
-            scaler.step(optimizer)
-            scaler.update()
-            steps += 1
-            total_loss += loss.item()
-            tqdmDataLoader.set_postfix(
-                ordered_dict={
-                    "epoch": epc + 1,
-                    "loss: ": total_loss/steps,
-                    "batch per device: ": x_0.shape[0],
-                    "img shape: ": x_0.shape[1:],
-                    "LR": optimizer.state_dict()['param_groups'][0]["lr"]
-                }
-            )
-    warmUpScheduler.step()
+count = {key: 0 for key in class_list}
+while (True):
 
-    diffusion.model.eval()
-    cemblayer.eval()
     # generating samples
     # The model generate 80 pictures(8 per row) each time
     # pictures of same row belong to the same class
     all_samples = []
-    each_device_batch = len(class_list)
+    each_device_batch = len(class_list)*5
     with torch.no_grad():
         lab = torch.ones(len(class_list), each_device_batch // len(class_list)).type(torch.long) \
             * torch.arange(start=0, end=len(class_list)).reshape(-1, 1)
@@ -327,7 +254,7 @@ for epc in range(params['epochs']):
                     params['image_size'], params['image_size'])
         if params['ddim']:
             generated = diffusion.ddim_sample(
-                genshape, 100, 0.1, 'quadratic', cemb=cemb)
+                genshape, 100, 0.2, 'quadratic', cemb=cemb)
         else:
             generated = diffusion.sample(genshape, cemb=cemb)
         generated = torch.cat([generated, generated, generated], dim=1)
@@ -335,10 +262,10 @@ for epc in range(params['epochs']):
         for i in range(len(lab)):
             img_pil = topilimage(generated[i].cpu())
             createDirectory(
-                f'../../result/scratch_Detail/BRNT/{class_list[lab[i]]}')
+                params['data_path']+f'{class_list[lab[i]]}')
             img_pil.save(
-                f'../../result/scratch_Detail/BRNT/{class_list[lab[i]]}/{epc}.png')
-
+                params['data_path']+f'{class_list[lab[i]]}/{count[class_list[lab[i]]]}.png')
+            count[class_list[lab[i]]] += 1
         # save checkpoints
         checkpoint = {
             'net': diffusion.model.state_dict(),
@@ -346,8 +273,4 @@ for epc in range(params['epochs']):
             'optimizer': optimizer.state_dict(),
             'scheduler': warmUpScheduler.state_dict()
         }
-    if epc % 5 == 0:
-        createDirectory(f'../../model/conditionDiff/scratch_details/BRNT/')
-        torch.save(
-            checkpoint, f'../../model/conditionDiff/scratch_details/BRNT/ckpt_{epc+1}_checkpoint.pt')
     torch.cuda.empty_cache()
