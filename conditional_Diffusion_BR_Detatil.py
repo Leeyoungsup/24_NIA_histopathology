@@ -24,7 +24,7 @@ from PIL import Image
 import torchvision
 import torch.nn as nn
 print(f"GPUs used:\t{torch.cuda.device_count()}")
-device = torch.device("cuda", 0)
+device = torch.device("cuda", 3)
 device1 = torch.device("cuda", 5)
 print(f"Device:\t\t{device}")
 
