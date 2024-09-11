@@ -24,51 +24,44 @@ from PIL import Image
 import torchvision
 import torch.nn as nn
 print(f"GPUs used:\t{torch.cuda.device_count()}")
-device = torch.device("cuda", 4)
-device1 = torch.device("cuda", 5)
+device = torch.device("cuda", 6)
+device1 = torch.device("cuda", 1)
 print(f"Device:\t\t{device}")
+tf = transforms.ToTensor()
+topilimage = torchvision.transforms.ToPILImage()
 
 
-def createDirectory(directory):
-    """_summary_
-        create Directory
-    Args:
-        directory (string): file_path
-    """
-    try:
-        if not os.path.exists(directory):
-            os.makedirs(directory)
-    except OSError:
-        print("Error: Failed to create the directory.")
-
-
-class_list = ['유형5', '유형6', '유형7']
+class_list = ['NT_epithelial', 'NT_immune',
+              'NT_stroma', 'TP_in_situ', 'TP_invasive']
 params = {'image_size': 1024,
-          'lr': 5e-5,
+          'lr': 2e-5,
           'beta1': 0.5,
           'beta2': 0.999,
           'batch_size': 1,
           'epochs': 1000,
           'n_classes': None,
-          'data_path': '../../data/origin_type/BRDC/',
+          'data_path': '../../data/normalization_type/BRIL/**/',
           'image_count': 5000,
           'inch': 1,
           'modch': 128,
           'outch': 1,
-          'chmul': [1, 1, 2, 2, 4, 4, 8],
+          'chmul': [1, 2, 2, 4, 4, 8],
           'numres': 2,
           'dtype': torch.float32,
-          'cdim': 256,
+          'cdim': 1024*1024,
           'useconv': False,
           'droprate': 0.1,
           'T': 1000,
           'w': 1.8,
           'v': 0.3,
           'multiplier': 1,
-          'threshold': 0.02,
+          'threshold': 0.1,
           'ddim': True,
           }
-tf = transforms.ToTensor()
+trans = transforms.Compose([
+    transforms.ToTensor(),
+    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+])
 
 
 def transback(data: Tensor) -> Tensor:
@@ -84,21 +77,21 @@ class CustomDataset(Dataset):
         self.args = parmas
         self.label = label
 
-    def trans(self, image):
+    def trans(self, image, label):
         if random.random() > 0.5:
             transform = transforms.RandomHorizontalFlip(1)
             image = transform(image)
-
+            label = transform(label)
         if random.random() > 0.5:
             transform = transforms.RandomVerticalFlip(1)
             image = transform(image)
-
-        return image
+            label = transform(label)
+        return image, label
 
     def __getitem__(self, index):
         image = self.images[index]
         label = self.label[index]
-        image = self.trans(image)
+        image, label = self.trans(image, label)
         return image, label
 
     def __len__(self):
@@ -206,23 +199,29 @@ class GeneratorUNet(nn.Module):
         return self.final(u7)
 
 
-image_label = []
-image_path = []
-for i in tqdm(range(len(class_list))):
-    image_list = glob(params['data_path']+class_list[i]+'/*.jpeg')
-    for j in range(len(image_list)):
-        image_path.append(image_list[j])
-        image_label.append(i)
+image_list = glob(params['data_path']+'/*.jpeg')
+
 
 train_images = torch.zeros(
-    (len(image_path), params['inch'], params['image_size'], params['image_size']))
-for i in tqdm(range(len(image_path))):
-    train_images[i] = tf(Image.open(image_path[i]).convert(
+    (len(image_list), params['inch'], params['image_size'], params['image_size']))
+train_label = torch.zeros(
+    (len(image_list), params['image_size'], params['image_size']))
+for i in tqdm(range(len(image_list))):
+    train_images[i] = tf(Image.open(image_list[i]).convert(
         'L').resize((params['image_size'], params['image_size'])))*2-1
-train_dataset = CustomDataset(params, train_images, image_label)
+    npy_label = np.load(image_list[i].replace(
+        '/BRIL', '/BR_mask/BRIL').replace('jpeg', 'npy'))
+
+    train_label[i] = torch.tensor(npy_label).float()
+
+train_dataset = CustomDataset(params, train_images, train_label)
 dataloader = DataLoader(
     train_dataset, batch_size=params['batch_size'], shuffle=True)
 
+generator = GeneratorUNet()
+generator.to(device1)
+generator.load_state_dict(torch.load(
+    '../../model/colorization/pix2pix/Pix2Pix_Generator_for_Colorization_176.pt', map_location=device1))
 net = Unet(in_ch=params['inch'],
            mod_ch=params['modch'],
            out_ch=params['outch'],
@@ -233,8 +232,6 @@ net = Unet(in_ch=params['inch'],
            droprate=params['droprate'],
            dtype=params['dtype']
            ).to(device)
-cemblayer = ConditionalEmbedding(
-    len(class_list), params['cdim'], params['cdim']).to(device)
 betas = get_named_beta_schedule(num_diffusion_timesteps=params['T'])
 diffusion = GaussianDiffusion(
     dtype=params['dtype'],
@@ -246,43 +243,30 @@ diffusion = GaussianDiffusion(
 )
 optimizer = torch.optim.AdamW(
     itertools.chain(
-        diffusion.model.parameters(),
-        cemblayer.parameters()
+        diffusion.model.parameters()
     ),
     lr=params['lr'],
     weight_decay=1e-6
 )
 
 
-cosineScheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.98)
+cosineScheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
 warmUpScheduler = GradualWarmupScheduler(
     optimizer=optimizer,
     multiplier=params['multiplier'],
-    warm_epoch=30,
+    warm_epoch=50,
     after_scheduler=cosineScheduler,
     last_epoch=0
 )
-# checkpoint = torch.load(
-#     f'../../model/conditionDiff/scratch_details/BRDC/ckpt_101_checkpoint.pt', map_location=device)
+# checkpoint=torch.load(f'../../model/conditionDiff/BRIL/ckpt_35_checkpoint.pt',map_location=device)
 # diffusion.model.load_state_dict(checkpoint['net'])
-# cemblayer.load_state_dict(checkpoint['cemblayer'])
-# optimizer.load_state_dict(checkpoint['optimizer'])
-# warmUpScheduler.load_state_dict(checkpoint['scheduler'])
-
-
-generator = GeneratorUNet()
-generator.to(device1)
-generator.load_state_dict(torch.load(
-    '../../model/colorization/pix2pix/Pix2Pix_Generator_for_Colorization_58.pt', map_location=device1))
-
 
 checkpoint = 0
 
 scaler = torch.cuda.amp.GradScaler()
-topilimage = torchvision.transforms.ToPILImage()
+
 for epc in range(params['epochs']):
     diffusion.model.train()
-    cemblayer.train()
     total_loss = 0
     steps = 0
     with tqdm(dataloader, dynamic_ncols=True) as tqdmDataLoader:
@@ -291,8 +275,7 @@ for epc in range(params['epochs']):
 
             x_0 = img.to(device)
             lab = lab.to(device)
-            cemb = cemblayer(lab)
-            loss = diffusion.trainloss(x_0, cemb=cemb)
+            loss = diffusion.trainloss(x_0, cemb=lab)
             optimizer.zero_grad(set_to_none=True)
             scaler.scale(loss).backward()
             scaler.step(optimizer)
@@ -311,43 +294,49 @@ for epc in range(params['epochs']):
     warmUpScheduler.step()
 
     diffusion.model.eval()
-    cemblayer.eval()
     # generating samples
     # The model generate 80 pictures(8 per row) each time
     # pictures of same row belong to the same class
     all_samples = []
     each_device_batch = len(class_list)
+    count = 1
     with torch.no_grad():
-        lab = torch.ones(len(class_list), each_device_batch // len(class_list)).type(torch.long) \
-            * torch.arange(start=0, end=len(class_list)).reshape(-1, 1)
-        lab = lab.reshape(-1, 1).squeeze()
-        lab = lab.to(device)
-        cemb = cemblayer(lab)
-        genshape = (each_device_batch, params['outch'],
-                    params['image_size'], params['image_size'])
+        for i, (img, lab1) in enumerate(dataloader):
+            if i == 0:
+                lab = lab1.to(device)
+            elif i < count:
+                lab = torch.cat((lab, lab1.to(device)), 0).to(device)
+            else:
+                break
+        genshape = (count, 1, params['image_size'], params['image_size'])
         if params['ddim']:
             generated = diffusion.ddim_sample(
-                genshape, 100, 0.1, 'quadratic', cemb=cemb)
+                genshape, 100, 0.5, 'quadratic', cemb=lab)
         else:
-            generated = diffusion.sample(genshape, cemb=cemb)
+            generated = diffusion.sample(genshape, cemb=lab)
         generated = torch.cat([generated, generated, generated], dim=1)
         generated = transback(generator(generated.to(device1)))
+        lab = lab.cpu()
         for i in range(len(lab)):
-            img_pil = topilimage(generated[i].cpu())
-            createDirectory(
-                f'../../result/scratch_Detail/BRDC/{class_list[lab[i]]}')
-            img_pil.save(
-                f'../../result/scratch_Detail/BRDC/{class_list[lab[i]]}/{epc}.png')
+            img_tensor = torch.zeros(
+                (3, params['image_size'], params['image_size']))
+            img_tensor[0] += torch.where(lab[i] == 1, 1, 0)
+            img_tensor[1] += torch.where(lab[i] == 2, 1, 0)
+            img_tensor[2] += torch.where(lab[i] == 3, 1, 0)
+            img_tensor[0] += torch.where(lab[i] == 4, 1, 0)
+            img_tensor[1] += torch.where(lab[i] == 4, 1, 0)
+            img_tensor[1] += torch.where(lab[i] == 5, 1, 0)
+            img_tensor[2] += torch.where(lab[i] == 5, 1, 0)
+            img_pil = topilimage(
+                torch.cat((generated[i].cpu(), img_tensor.float()), dim=2))
+            img_pil.save(f'../../result/binary_mask_synth/BRIL/{epc}_{i}.png')
 
-        # save checkpoints
+    # save checkpoints
         checkpoint = {
             'net': diffusion.model.state_dict(),
-            'cemblayer': cemblayer.state_dict(),
             'optimizer': optimizer.state_dict(),
             'scheduler': warmUpScheduler.state_dict()
         }
-    if epc % 5 == 0:
-        createDirectory(f'../../model/conditionDiff/scratch_details/BRDC/')
-        torch.save(
-            checkpoint, f'../../model/conditionDiff/scratch_details/BRDC/ckpt_{epc+1}_checkpoint.pt')
+    torch.save(
+        checkpoint, f'../../model/binary_mask_synth/BRIL/ckpt_{epc+1}_checkpoint.pt')
     torch.cuda.empty_cache()

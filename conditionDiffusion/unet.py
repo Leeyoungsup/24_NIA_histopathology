@@ -271,13 +271,7 @@ class Unet(nn.Module):
 
     def forward(self, x: torch.Tensor, t: torch.Tensor, cemb: torch.Tensor) -> torch.Tensor:
         temb = self.temb_layer(timestep_embedding(t, self.mod_ch))
-        # cemb가 (1024, 1024)로 들어올 경우 이를 flatten하여 1차원 텐서로 변환
-        if cemb.dim() == 4:
-            cemb = torch.flatten(cemb, 1)  # (B, 1024*1024)
-            cemb = self.cemb_layer(cemb)  # 임베딩 레이어 통과
-        else:
-            cemb = self.cemb_layer1(cemb)
-
+        cemb = self.cemb_layer(cemb)
         hs = []
         h = x.type(self.dtype)
         for block in self.downblocks:

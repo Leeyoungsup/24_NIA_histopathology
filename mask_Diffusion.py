@@ -41,12 +41,12 @@ params = {'image_size': 1024,
           'data_path': '../../data/normalization_type/BRDC/**/',
           'image_count': 5000,
           'inch': 3,
-          'modch': 64,
+          'modch': 128,
           'outch': 3,
-          'chmul': [1, 2, 4, 8],
-          'numres': 4,
+          'chmul': [1, 2, 2, 4, 4, 8],
+          'numres': 2,
           'dtype': torch.float32,
-          'cdim': 1024*1024*6,
+          'cdim': 1024*1024,
           'useconv': False,
           'droprate': 0.1,
           'T': 1000,
@@ -101,15 +101,15 @@ image_list = glob(params['data_path']+'/*.jpeg')
 
 train_images = torch.zeros(
     (len(image_list), params['inch'], params['image_size'], params['image_size']))
-train_label = torch.zeros((len(image_list), len(
-    class_list)+1, params['image_size'], params['image_size']))
+train_label = torch.zeros(
+    (len(image_list), params['image_size'], params['image_size']))
 for i in tqdm(range(len(image_list))):
     train_images[i] = tf(Image.open(image_list[i]).convert(
         'RGB').resize((params['image_size'], params['image_size'])))*2-1
     npy_label = np.load(image_list[i].replace(
         '/BRDC', '/BR_mask/BRDC').replace('jpeg', 'npy'))
-    for j in range(len(class_list)+1):
-        train_label[i, j] = torch.tensor(npy_label == j).float()*2-1
+
+    train_label[i] = torch.tensor(npy_label).float()
 
 train_dataset = CustomDataset(params, train_images, train_label)
 dataloader = DataLoader(
@@ -168,8 +168,7 @@ for epc in range(params['epochs']):
 
             x_0 = img.to(device)
             lab = lab.to(device)
-            cemb = lab
-            loss = diffusion.trainloss(x_0, cemb=cemb)
+            loss = diffusion.trainloss(x_0, cemb=lab)
             optimizer.zero_grad(set_to_none=True)
             scaler.scale(loss).backward()
             scaler.step(optimizer)
@@ -202,19 +201,29 @@ for epc in range(params['epochs']):
                 lab = torch.cat((lab, lab1.to(device)), 0).to(device)
             else:
                 break
-        cemb = lab
         genshape = (count, 3, params['image_size'], params['image_size'])
         if params['ddim']:
             generated = diffusion.ddim_sample(
-                genshape, 100, 0.5, 'quadratic', cemb=cemb)
+                genshape, 100, 0.5, 'quadratic', cemb=lab)
         else:
-            generated = diffusion.sample(genshape, cemb=cemb)
+            generated = diffusion.sample(genshape, cemb=lab)
         generated = transback(generated)
+        lab = lab.cpu()
         for i in range(len(lab)):
-            img_pil = topilimage(generated[i].cpu())
+            img_tensor = torch.zeros(
+                (3, params['image_size'], params['image_size']))
+            img_tensor[0] += torch.where(lab[i] == 1, 1, 0)
+            img_tensor[1] += torch.where(lab[i] == 2, 1, 0)
+            img_tensor[2] += torch.where(lab[i] == 3, 1, 0)
+            img_tensor[0] += torch.where(lab[i] == 4, 1, 0)
+            img_tensor[1] += torch.where(lab[i] == 4, 1, 0)
+            img_tensor[1] += torch.where(lab[i] == 5, 1, 0)
+            img_tensor[2] += torch.where(lab[i] == 5, 1, 0)
+            img_pil = topilimage(
+                torch.cat((generated[i].cpu(), img_tensor.float()), dim=2))
             img_pil.save(f'../../result/mask_synth/BRDC/{epc}_{i}.png')
 
-        # save checkpoints
+    # save checkpoints
         checkpoint = {
             'net': diffusion.model.state_dict(),
             'optimizer': optimizer.state_dict(),
