@@ -24,7 +24,7 @@ from PIL import Image
 import torchvision
 import torch.nn as nn
 print(f"GPUs used:\t{torch.cuda.device_count()}")
-device = torch.device("cuda", 6)
+device = torch.device("cuda", 0)
 device1 = torch.device("cuda", 5)
 print(f"Device:\t\t{device}")
 
@@ -42,23 +42,23 @@ def createDirectory(directory):
         print("Error: Failed to create the directory.")
 
 
-class_list = ['유형1', '유형2']
+class_list = ['유형10', '유형11', '유형12', '유형13', '유형14', '유형15']
 params = {'image_size': 1024,
-          'lr': 2e-5,
+          'lr': 5e-5,
           'beta1': 0.5,
           'beta2': 0.999,
           'batch_size': 1,
           'epochs': 1000,
           'n_classes': None,
-          'data_path': '../../result/synth/BRNT/',
+          'data_path': '../../result/synth/BRID/',
           'image_count': 5000,
           'inch': 1,
           'modch': 128,
           'outch': 1,
-          'chmul': [1, 2, 2, 4, 4, 8],
+          'chmul': [1, 1, 2, 2, 4, 4, 8],
           'numres': 2,
           'dtype': torch.float32,
-          'cdim': 10,
+          'cdim': 256,
           'useconv': False,
           'droprate': 0.1,
           'T': 1000,
@@ -75,6 +75,7 @@ def transback(data: Tensor) -> Tensor:
     return data / 2 + 0.5
 
 
+# U-Net 아키텍처의 다운 샘플링(Down Sampling) 모듈
 class UNetDown(nn.Module):
     def __init__(self, in_channels, out_channels, normalize=True, dropout=0.0):
         super(UNetDown, self).__init__()
@@ -96,19 +97,19 @@ class UNetDown(nn.Module):
 class UNetUp(nn.Module):
     def __init__(self, in_channels, out_channels, dropout=0.0):
         super(UNetUp, self).__init__()
-        # 너비와 높이가 2배씩 증가
-        layers = [nn.ConvTranspose2d(
-            in_channels, out_channels, kernel_size=4, stride=2, padding=1, bias=False)]
-        layers.append(nn.InstanceNorm2d(out_channels))
-        layers.append(nn.ReLU(inplace=True))
+        # ConvTranspose2d 대신 Upsample과 Conv2d 사용
+        layers = [nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True),
+                  nn.Conv2d(in_channels, out_channels,
+                            kernel_size=3, stride=1, padding=1),
+                  nn.InstanceNorm2d(out_channels),
+                  nn.ReLU(inplace=True)]
         if dropout:
             layers.append(nn.Dropout(dropout))
         self.model = nn.Sequential(*layers)
 
     def forward(self, x, skip_input):
         x = self.model(x)
-        x = torch.cat((x, skip_input), 1)  # 채널 레벨에서 합치기(concatenation)
-
+        x = torch.cat((x, skip_input), 1)  # 채널 레벨에서 합치기
         return x
 
 
@@ -186,6 +187,7 @@ net = Unet(in_ch=params['inch'],
            droprate=params['droprate'],
            dtype=params['dtype']
            ).to(device)
+
 cemblayer = ConditionalEmbedding(
     len(class_list), params['cdim'], params['cdim']).to(device)
 betas = get_named_beta_schedule(num_diffusion_timesteps=params['T'])
@@ -216,7 +218,7 @@ warmUpScheduler = GradualWarmupScheduler(
     last_epoch=0
 )
 checkpoint = torch.load(
-    f'../../model/conditionDiff/scratch_details/BRNT/ckpt_66_checkpoint.pt', map_location=device)
+    f'../../model/conditionDiff/scratch_details/BRID/ckpt_221_checkpoint.pt', map_location=device)
 diffusion.model.load_state_dict(checkpoint['net'])
 cemblayer.load_state_dict(checkpoint['cemblayer'])
 optimizer.load_state_dict(checkpoint['optimizer'])
@@ -226,7 +228,7 @@ warmUpScheduler.load_state_dict(checkpoint['scheduler'])
 generator = GeneratorUNet()
 generator.to(device1)
 generator.load_state_dict(torch.load(
-    '../../model/colorization/pix2pix/Pix2Pix_Generator_for_Colorization_159.pt', map_location=device1))
+    '../../model/colorization/pix2pix_r/Pix2Pix_Generator_for_Colorization_23.pt', map_location=device1))
 
 
 checkpoint = 0
@@ -243,7 +245,7 @@ while (True):
     # The model generate 80 pictures(8 per row) each time
     # pictures of same row belong to the same class
     all_samples = []
-    each_device_batch = len(class_list)*5
+    each_device_batch = len(class_list)*1
     with torch.no_grad():
         lab = torch.ones(len(class_list), each_device_batch // len(class_list)).type(torch.long) \
             * torch.arange(start=0, end=len(class_list)).reshape(-1, 1)
@@ -254,7 +256,7 @@ while (True):
                     params['image_size'], params['image_size'])
         if params['ddim']:
             generated = diffusion.ddim_sample(
-                genshape, 100, 0.2, 'quadratic', cemb=cemb)
+                genshape, 100, 0.0, 'quadratic', cemb=cemb)
         else:
             generated = diffusion.sample(genshape, cemb=cemb)
         generated = torch.cat([generated, generated, generated], dim=1)
@@ -266,11 +268,5 @@ while (True):
             img_pil.save(
                 params['data_path']+f'{class_list[lab[i]]}/{count[class_list[lab[i]]]}.png')
             count[class_list[lab[i]]] += 1
-        # save checkpoints
-        checkpoint = {
-            'net': diffusion.model.state_dict(),
-            'cemblayer': cemblayer.state_dict(),
-            'optimizer': optimizer.state_dict(),
-            'scheduler': warmUpScheduler.state_dict()
-        }
+
     torch.cuda.empty_cache()

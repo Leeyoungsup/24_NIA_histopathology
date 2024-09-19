@@ -105,6 +105,7 @@ class CustomDataset(Dataset):
         return len(self.images)
 
 
+# U-Net 아키텍처의 다운 샘플링(Down Sampling) 모듈
 class UNetDown(nn.Module):
     def __init__(self, in_channels, out_channels, normalize=True, dropout=0.0):
         super(UNetDown, self).__init__()
@@ -126,19 +127,19 @@ class UNetDown(nn.Module):
 class UNetUp(nn.Module):
     def __init__(self, in_channels, out_channels, dropout=0.0):
         super(UNetUp, self).__init__()
-        # 너비와 높이가 2배씩 증가
-        layers = [nn.ConvTranspose2d(
-            in_channels, out_channels, kernel_size=4, stride=2, padding=1, bias=False)]
-        layers.append(nn.InstanceNorm2d(out_channels))
-        layers.append(nn.ReLU(inplace=True))
+        # ConvTranspose2d 대신 Upsample과 Conv2d 사용
+        layers = [nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True),
+                  nn.Conv2d(in_channels, out_channels,
+                            kernel_size=3, stride=1, padding=1),
+                  nn.InstanceNorm2d(out_channels),
+                  nn.ReLU(inplace=True)]
         if dropout:
             layers.append(nn.Dropout(dropout))
         self.model = nn.Sequential(*layers)
 
     def forward(self, x, skip_input):
         x = self.model(x)
-        x = torch.cat((x, skip_input), 1)  # 채널 레벨에서 합치기(concatenation)
-
+        x = torch.cat((x, skip_input), 1)  # 채널 레벨에서 합치기
         return x
 
 
@@ -262,25 +263,25 @@ warmUpScheduler = GradualWarmupScheduler(
     after_scheduler=cosineScheduler,
     last_epoch=0
 )
-# checkpoint = torch.load(
-#     f'../../model/conditionDiff/scratch_details/BRDC/ckpt_101_checkpoint.pt', map_location=device)
-# diffusion.model.load_state_dict(checkpoint['net'])
-# cemblayer.load_state_dict(checkpoint['cemblayer'])
-# optimizer.load_state_dict(checkpoint['optimizer'])
-# warmUpScheduler.load_state_dict(checkpoint['scheduler'])
+checkpoint = torch.load(
+    f'../../model/conditionDiff/scratch_details/BRDC/ckpt_151_checkpoint.pt', map_location=device)
+diffusion.model.load_state_dict(checkpoint['net'])
+cemblayer.load_state_dict(checkpoint['cemblayer'])
+optimizer.load_state_dict(checkpoint['optimizer'])
+warmUpScheduler.load_state_dict(checkpoint['scheduler'])
 
 
 generator = GeneratorUNet()
 generator.to(device1)
 generator.load_state_dict(torch.load(
-    '../../model/colorization/pix2pix/Pix2Pix_Generator_for_Colorization_58.pt', map_location=device1))
+    '../../model/colorization/pix2pix_r/Pix2Pix_Generator_for_Colorization_360.pt', map_location=device1))
 
 
 checkpoint = 0
 
 scaler = torch.cuda.amp.GradScaler()
 topilimage = torchvision.transforms.ToPILImage()
-for epc in range(params['epochs']):
+for epc in range(151, params['epochs']):
     diffusion.model.train()
     cemblayer.train()
     total_loss = 0

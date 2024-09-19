@@ -24,8 +24,8 @@ from PIL import Image
 import torchvision
 import torch.nn as nn
 print(f"GPUs used:\t{torch.cuda.device_count()}")
-device = torch.device("cuda", 6)
-device1 = torch.device("cuda", 5)
+device = torch.device("cuda", 2)
+device1 = torch.device("cuda", 6)
 print(f"Device:\t\t{device}")
 
 
@@ -50,11 +50,11 @@ params = {'image_size': 1024,
           'batch_size': 1,
           'epochs': 1000,
           'n_classes': None,
-          'data_path': '../../data/origin_type/STNT/',
+          'data_path': '../../data/normalization_type/BRNT/',
           'image_count': 5000,
-          'inch': 1,
+          'inch': 3,
           'modch': 128,
-          'outch': 1,
+          'outch': 3,
           'chmul': [1, 1, 2, 2, 4, 4, 8],
           'numres': 2,
           'dtype': torch.float32,
@@ -104,109 +104,81 @@ class CustomDataset(Dataset):
     def __len__(self):
         return len(self.images)
 
-# U-Net 아키텍처의 다운 샘플링(Down Sampling) 모듈
+class ResidualBlock(nn.Module):
+    def __init__(self, in_features):
+        super(ResidualBlock, self).__init__()
+
+        conv_block = [nn.ReflectionPad2d(1),
+                      nn.Conv2d(in_features, in_features, 3),
+                      nn.InstanceNorm2d(in_features),
+                      nn.ReLU(inplace=True),
+                      nn.ReflectionPad2d(1),
+                      nn.Conv2d(in_features, in_features, 3),
+                      nn.InstanceNorm2d(in_features)]
+
+        self.conv_block = nn.Sequential(*conv_block)
+
+    def forward(self, x):
+        return x + self.conv_block(x)
 
 
-class UNetDown(nn.Module):
-    def __init__(self, in_channels, out_channels, normalize=True, dropout=0.0):
-        super(UNetDown, self).__init__()
-        # 너비와 높이가 2배씩 감소
-        layers = [nn.Conv2d(in_channels, out_channels,
-                            kernel_size=4, stride=2, padding=1, bias=False)]
-        if normalize:
-            layers.append(nn.InstanceNorm2d(out_channels))
-        layers.append(nn.LeakyReLU(0.2))
-        if dropout:
-            layers.append(nn.Dropout(dropout))
-        self.model = nn.Sequential(*layers)
+class Generator(nn.Module):
+    def __init__(self, input_nc, output_nc, n_residual_blocks=9):
+        super(Generator, self).__init__()
+
+        # Initial convolution block
+        model = [nn.ReflectionPad2d(3),
+                 nn.Conv2d(input_nc, 64, 7),
+                 nn.InstanceNorm2d(64),
+                 nn.ReLU(inplace=True)]
+
+        # Downsampling
+        in_features = 64
+        out_features = in_features*2
+        for _ in range(2):
+            model += [nn.Conv2d(in_features, out_features, 3, stride=2, padding=1),
+                      nn.InstanceNorm2d(out_features),
+                      nn.ReLU(inplace=True)]
+            in_features = out_features
+            out_features = in_features*2
+
+        # Residual blocks
+        for _ in range(n_residual_blocks):
+            model += [ResidualBlock(in_features)]
+
+        # Upsampling
+        out_features = in_features//2
+        for _ in range(2):
+            model += [nn.ConvTranspose2d(in_features, out_features, 3, stride=2, padding=1, output_padding=1),
+                      nn.InstanceNorm2d(out_features),
+                      nn.ReLU(inplace=True)]
+            in_features = out_features
+            out_features = in_features//2
+
+        # Output layer
+        model += [nn.ReflectionPad2d(3),
+                  nn.Conv2d(64, output_nc, 7),
+                  nn.Tanh()]
+
+        self.model = nn.Sequential(*model)
 
     def forward(self, x):
         return self.model(x)
 
 
-# U-Net 아키텍처의 업 샘플링(Up Sampling) 모듈: Skip Connection 입력 사용
-class UNetUp(nn.Module):
-    def __init__(self, in_channels, out_channels, dropout=0.0):
-        super(UNetUp, self).__init__()
-        # ConvTranspose2d 대신 Upsample과 Conv2d 사용
-        layers = [nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True),
-                  nn.Conv2d(in_channels, out_channels,
-                            kernel_size=3, stride=1, padding=1),
-                  nn.InstanceNorm2d(out_channels),
-                  nn.ReLU(inplace=True)]
-        if dropout:
-            layers.append(nn.Dropout(dropout))
-        self.model = nn.Sequential(*layers)
+def weights_init_normal(m):
+    classname = m.__class__.__name__
+    if classname.find("Conv") != -1:
+        torch.nn.init.normal_(m.weight.data, 0.0, 0.02)
 
-    def forward(self, x, skip_input):
-        x = self.model(x)
-        x = torch.cat((x, skip_input), 1)  # 채널 레벨에서 합치기
-        return x
+    elif classname.find("BatchNorm") != -1:
+        torch.nn.init.normal_(m.weight.data, 1.0, 0.02)
+        torch.nn.init.constant_(m.bias.data, 0.0)
 
 
-# U-Net 생성자(Generator) 아키텍처
-class GeneratorUNet(nn.Module):
-    def __init__(self, in_channels=3, out_channels=3):
-        super(GeneratorUNet, self).__init__()
-
-        # 출력: [64 x 512 x 512]
-        self.down1 = UNetDown(in_channels, 64, normalize=False)
-        # 출력: [128 x 256 x 256]
-        self.down2 = UNetDown(64, 128)
-        # 출력: [256 x 128 x 128]
-        self.down3 = UNetDown(128, 256)
-        # 출력: [512 x 64 x 64]
-        self.down4 = UNetDown(256, 512, dropout=0.5)
-        # 출력: [512 x 32 x 32]
-        self.down5 = UNetDown(512, 512, dropout=0.5)
-        # 출력: [512 x 16 x 16]
-        self.down6 = UNetDown(512, 512, dropout=0.5)
-        # 출력: [512 x 8 x 8]
-        self.down7 = UNetDown(512, 512, dropout=0.5)
-        self.down8 = UNetDown(512, 512, normalize=False,
-                              dropout=0.5)  # 출력: [512 x 4 x 4]
-
-        # 출력: [1024 x 8 x 8]
-        self.up1 = UNetUp(512, 512, dropout=0.5)
-        # 출력: [1024 x 16 x 16]
-        self.up2 = UNetUp(1024, 512, dropout=0.5)
-        # 출력: [1024 x 32 x 32]
-        self.up3 = UNetUp(1024, 512, dropout=0.5)
-        # 출력: [1024 x 64 x 64]
-        self.up4 = UNetUp(1024, 512, dropout=0.5)
-        # 출력: [512 x 128 x 128]
-        self.up5 = UNetUp(1024, 256)
-        # 출력: [256 x 256 x 256]
-        self.up6 = UNetUp(512, 128)
-        # 출력: [128 x 512 x 512]
-        self.up7 = UNetUp(256, 64)
-
-        self.final = nn.Sequential(
-            nn.Upsample(scale_factor=2),  # 출력: [128 x 1024 x 1024]
-            nn.Conv2d(128, out_channels, kernel_size=3, stride=1,
-                      padding=1),  # 출력: [3 x 1024 x 1024]
-            nn.Tanh(),
-        )
-
-    def forward(self, x):
-        d1 = self.down1(x)
-        d2 = self.down2(d1)
-        d3 = self.down3(d2)
-        d4 = self.down4(d3)
-        d5 = self.down5(d4)
-        d6 = self.down6(d5)
-        d7 = self.down7(d6)
-        d8 = self.down8(d7)
-        u1 = self.up1(d8, d7)
-        u2 = self.up2(u1, d6)
-        u3 = self.up3(u2, d5)
-        u4 = self.up4(u3, d4)
-        u5 = self.up5(u4, d3)
-        u6 = self.up6(u5, d2)
-        u7 = self.up7(u6, d1)
-
-        return self.final(u7)
-
+Generator = Generator(3, 3).to(device1)
+Generator.load_state_dict(torch.load(
+    '../../model/cyclegan/G_B_28.pth', map_location=device1))
 
 image_label = []
 image_path = []
@@ -220,7 +192,7 @@ train_images = torch.zeros(
     (len(image_path), params['inch'], params['image_size'], params['image_size']))
 for i in tqdm(range(len(image_path))):
     train_images[i] = tf(Image.open(image_path[i]).convert(
-        'L').resize((params['image_size'], params['image_size'])))*2-1
+        'RGB').resize((params['image_size'], params['image_size'])))*2-1
 train_dataset = CustomDataset(params, train_images, image_label)
 dataloader = DataLoader(
     train_dataset, batch_size=params['batch_size'], shuffle=True)
@@ -264,25 +236,25 @@ warmUpScheduler = GradualWarmupScheduler(
     after_scheduler=cosineScheduler,
     last_epoch=0
 )
-checkpoint = torch.load(
-    f'../../model/conditionDiff/scratch_details/STNT/ckpt_191_checkpoint.pt', map_location=device)
-diffusion.model.load_state_dict(checkpoint['net'])
-cemblayer.load_state_dict(checkpoint['cemblayer'])
-optimizer.load_state_dict(checkpoint['optimizer'])
-warmUpScheduler.load_state_dict(checkpoint['scheduler'])
+# checkpoint = torch.load(
+#     f'../../model/conditionDiff/scratch_details/BRNT/ckpt_151_checkpoint.pt', map_location=device)
+# diffusion.model.load_state_dict(checkpoint['net'])
+# cemblayer.load_state_dict(checkpoint['cemblayer'])
+# optimizer.load_state_dict(checkpoint['optimizer'])
+# warmUpScheduler.load_state_dict(checkpoint['scheduler'])
 
 
-generator = GeneratorUNet()
-generator.to(device1)
-generator.load_state_dict(torch.load(
-    '../../model/colorization/pix2pix_r/Pix2Pix_Generator_for_Colorization_360.pt', map_location=device1))
+# generator = GeneratorUNet()
+# generator.to(device1)
+# generator.load_state_dict(torch.load(
+#     '../../model/colorization/pix2pix_r/Pix2Pix_Generator_for_Colorization_360.pt', map_location=device1))
 
 
 checkpoint = 0
 
 scaler = torch.cuda.amp.GradScaler()
 topilimage = torchvision.transforms.ToPILImage()
-for epc in range(191, params['epochs']):
+for epc in range(params['epochs']):
     diffusion.model.train()
     cemblayer.train()
     total_loss = 0
@@ -329,17 +301,16 @@ for epc in range(191, params['epochs']):
                     params['image_size'], params['image_size'])
         if params['ddim']:
             generated = diffusion.ddim_sample(
-                genshape, 100, 0, 'quadratic', cemb=cemb)
+                genshape, 100, 0.1, 'quadratic', cemb=cemb)
         else:
             generated = diffusion.sample(genshape, cemb=cemb)
-        generated = torch.cat([generated, generated, generated], dim=1)
-        generated = transback(generator(generated.to(device1)))
+        generated = transback(Generator(generated.to(device1)).to(device))
         for i in range(len(lab)):
             img_pil = topilimage(generated[i].cpu())
             createDirectory(
-                f'../../result/scratch_Detail/STNT/{class_list[lab[i]]}')
+                f'../../result/color_scratch_Detail/BRNT/{class_list[lab[i]]}')
             img_pil.save(
-                f'../../result/scratch_Detail/STNT/{class_list[lab[i]]}/{epc}.png')
+                f'../../result/color_scratch_Detail/BRNT/{class_list[lab[i]]}/{epc}.png')
 
         # save checkpoints
         checkpoint = {
@@ -349,7 +320,8 @@ for epc in range(191, params['epochs']):
             'scheduler': warmUpScheduler.state_dict()
         }
     if epc % 5 == 0:
-        createDirectory(f'../../model/conditionDiff/scratch_details/STNT/')
+        createDirectory(
+            f'../../model/conditionDiff/color_scratch_details/BRNT/')
         torch.save(
-            checkpoint, f'../../model/conditionDiff/scratch_details/STNT/ckpt_{epc+1}_checkpoint.pt')
+            checkpoint, f'../../model/conditionDiff/color_scratch_details/BRNT/ckpt_{epc+1}_checkpoint.pt')
     torch.cuda.empty_cache()

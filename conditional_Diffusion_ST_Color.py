@@ -24,7 +24,7 @@ from PIL import Image
 import torchvision
 import torch.nn as nn
 print(f"GPUs used:\t{torch.cuda.device_count()}")
-device = torch.device("cuda", 6)
+device = torch.device("cuda", 5)
 device1 = torch.device("cuda", 5)
 print(f"Device:\t\t{device}")
 
@@ -42,7 +42,7 @@ def createDirectory(directory):
         print("Error: Failed to create the directory.")
 
 
-class_list = ['유형1', '유형2']
+class_list = ['유형3', '유형4', '유형5', '유형6']
 params = {'image_size': 1024,
           'lr': 5e-5,
           'beta1': 0.5,
@@ -50,11 +50,11 @@ params = {'image_size': 1024,
           'batch_size': 1,
           'epochs': 1000,
           'n_classes': None,
-          'data_path': '../../data/origin_type/STNT/',
+          'data_path': '../../data/normalization_type/STIN/',
           'image_count': 5000,
-          'inch': 1,
+          'inch': 3,
           'modch': 128,
-          'outch': 1,
+          'outch': 3,
           'chmul': [1, 1, 2, 2, 4, 4, 8],
           'numres': 2,
           'dtype': torch.float32,
@@ -220,7 +220,7 @@ train_images = torch.zeros(
     (len(image_path), params['inch'], params['image_size'], params['image_size']))
 for i in tqdm(range(len(image_path))):
     train_images[i] = tf(Image.open(image_path[i]).convert(
-        'L').resize((params['image_size'], params['image_size'])))*2-1
+        'RGB').resize((params['image_size'], params['image_size'])))*2-1
 train_dataset = CustomDataset(params, train_images, image_label)
 dataloader = DataLoader(
     train_dataset, batch_size=params['batch_size'], shuffle=True)
@@ -264,25 +264,25 @@ warmUpScheduler = GradualWarmupScheduler(
     after_scheduler=cosineScheduler,
     last_epoch=0
 )
-checkpoint = torch.load(
-    f'../../model/conditionDiff/scratch_details/STNT/ckpt_191_checkpoint.pt', map_location=device)
-diffusion.model.load_state_dict(checkpoint['net'])
-cemblayer.load_state_dict(checkpoint['cemblayer'])
-optimizer.load_state_dict(checkpoint['optimizer'])
-warmUpScheduler.load_state_dict(checkpoint['scheduler'])
+# checkpoint = torch.load(
+#     f'../../model/conditionDiff/scratch_details/STIN/ckpt_191_checkpoint.pt', map_location=device)
+# diffusion.model.load_state_dict(checkpoint['net'])
+# cemblayer.load_state_dict(checkpoint['cemblayer'])
+# optimizer.load_state_dict(checkpoint['optimizer'])
+# warmUpScheduler.load_state_dict(checkpoint['scheduler'])
 
 
-generator = GeneratorUNet()
-generator.to(device1)
-generator.load_state_dict(torch.load(
-    '../../model/colorization/pix2pix_r/Pix2Pix_Generator_for_Colorization_360.pt', map_location=device1))
+# generator = GeneratorUNet()
+# generator.to(device1)
+# generator.load_state_dict(torch.load(
+#     '../../model/colorization/pix2pix_r/Pix2Pix_Generator_for_Colorization_360.pt', map_location=device1))
 
 
 checkpoint = 0
 
 scaler = torch.cuda.amp.GradScaler()
 topilimage = torchvision.transforms.ToPILImage()
-for epc in range(191, params['epochs']):
+for epc in range(params['epochs']):
     diffusion.model.train()
     cemblayer.train()
     total_loss = 0
@@ -332,14 +332,13 @@ for epc in range(191, params['epochs']):
                 genshape, 100, 0, 'quadratic', cemb=cemb)
         else:
             generated = diffusion.sample(genshape, cemb=cemb)
-        generated = torch.cat([generated, generated, generated], dim=1)
-        generated = transback(generator(generated.to(device1)))
+        generated = transback(generated)
         for i in range(len(lab)):
             img_pil = topilimage(generated[i].cpu())
             createDirectory(
-                f'../../result/scratch_Detail/STNT/{class_list[lab[i]]}')
+                f'../../result/color_scratch_Detail/STIN/{class_list[lab[i]]}')
             img_pil.save(
-                f'../../result/scratch_Detail/STNT/{class_list[lab[i]]}/{epc}.png')
+                f'../../result/color_scratch_Detail/STIN/{class_list[lab[i]]}/{epc}.png')
 
         # save checkpoints
         checkpoint = {
@@ -349,7 +348,8 @@ for epc in range(191, params['epochs']):
             'scheduler': warmUpScheduler.state_dict()
         }
     if epc % 5 == 0:
-        createDirectory(f'../../model/conditionDiff/scratch_details/STNT/')
+        createDirectory(
+            f'../../model/conditionDiff/color_scratch_details/STIN/')
         torch.save(
-            checkpoint, f'../../model/conditionDiff/scratch_details/STNT/ckpt_{epc+1}_checkpoint.pt')
+            checkpoint, f'../../model/conditionDiff/color_scratch_details/STIN/ckpt_{epc+1}_checkpoint.pt')
     torch.cuda.empty_cache()

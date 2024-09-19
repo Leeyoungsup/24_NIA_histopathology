@@ -22,13 +22,15 @@ from conditionDiffusion.diffusion import GaussianDiffusion
 from conditionDiffusion.Scheduler import GradualWarmupScheduler
 from PIL import Image
 import torchvision
+import torch.nn as nn
 print(f"GPUs used:\t{torch.cuda.device_count()}")
-device = torch.device("cuda", 5)
+device = torch.device("cuda", 1)
+device1 = torch.device("cuda", 6)
 print(f"Device:\t\t{device}")
 
 class_list = ['STNT', 'STMX', 'STIN', 'STDI']
 params = {'image_size': 1024,
-          'lr': 1e-5,
+          'lr': 5e-5,
           'beta1': 0.5,
           'beta2': 0.999,
           'batch_size': 1,
@@ -37,18 +39,18 @@ params = {'image_size': 1024,
           'data_path': '../../data/NIA/',
           'image_count': 10000,
           'inch': 3,
-          'modch': 32,
+          'modch': 128,
           'outch': 3,
-          'chmul': [1, 2, 4, 8, 16, 32, 64],
+          'chmul': [1, 1, 2, 2, 4, 4, 8],
           'numres': 2,
           'dtype': torch.float32,
-          'cdim': 10,
+          'cdim': 256,
           'useconv': False,
           'droprate': 0.1,
           'T': 1000,
           'w': 1.8,
           'v': 0.3,
-          'multiplier': 2,
+          'multiplier': 1,
           'threshold': 0.1,
           'ddim': True,
           }
@@ -124,6 +126,82 @@ class CustomDataset(Dataset):
         return 40000
 
 
+class ResidualBlock(nn.Module):
+    def __init__(self, in_features):
+        super(ResidualBlock, self).__init__()
+
+        conv_block = [nn.ReflectionPad2d(1),
+                      nn.Conv2d(in_features, in_features, 3),
+                      nn.InstanceNorm2d(in_features),
+                      nn.ReLU(inplace=True),
+                      nn.ReflectionPad2d(1),
+                      nn.Conv2d(in_features, in_features, 3),
+                      nn.InstanceNorm2d(in_features)]
+
+        self.conv_block = nn.Sequential(*conv_block)
+
+    def forward(self, x):
+        return x + self.conv_block(x)
+
+
+class Generator(nn.Module):
+    def __init__(self, input_nc, output_nc, n_residual_blocks=9):
+        super(Generator, self).__init__()
+
+        # Initial convolution block
+        model = [nn.ReflectionPad2d(3),
+                 nn.Conv2d(input_nc, 64, 7),
+                 nn.InstanceNorm2d(64),
+                 nn.ReLU(inplace=True)]
+
+        # Downsampling
+        in_features = 64
+        out_features = in_features*2
+        for _ in range(2):
+            model += [nn.Conv2d(in_features, out_features, 3, stride=2, padding=1),
+                      nn.InstanceNorm2d(out_features),
+                      nn.ReLU(inplace=True)]
+            in_features = out_features
+            out_features = in_features*2
+
+        # Residual blocks
+        for _ in range(n_residual_blocks):
+            model += [ResidualBlock(in_features)]
+
+        # Upsampling
+        out_features = in_features//2
+        for _ in range(2):
+            model += [nn.ConvTranspose2d(in_features, out_features, 3, stride=2, padding=1, output_padding=1),
+                      nn.InstanceNorm2d(out_features),
+                      nn.ReLU(inplace=True)]
+            in_features = out_features
+            out_features = in_features//2
+
+        # Output layer
+        model += [nn.ReflectionPad2d(3),
+                  nn.Conv2d(64, output_nc, 7),
+                  nn.Tanh()]
+
+        self.model = nn.Sequential(*model)
+
+    def forward(self, x):
+        return self.model(x)
+
+
+def weights_init_normal(m):
+    classname = m.__class__.__name__
+    if classname.find("Conv") != -1:
+        torch.nn.init.normal_(m.weight.data, 0.0, 0.02)
+
+    elif classname.find("BatchNorm") != -1:
+        torch.nn.init.normal_(m.weight.data, 1.0, 0.02)
+        torch.nn.init.constant_(m.bias.data, 0.0)
+
+
+Generator = Generator(3, 3).to(device1)
+Generator.load_state_dict(torch.load(
+    '../../model/cyclegan/G_B_28.pth', map_location=device1))
+
 image_label = []
 image_path = []
 count_list = []
@@ -171,22 +249,22 @@ optimizer = torch.optim.AdamW(
 
 cosineScheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
 warmUpScheduler = GradualWarmupScheduler(
-                        optimizer = optimizer,
-                        multiplier = params['multiplier'],
-                        warm_epoch = 2,
-                        after_scheduler = cosineScheduler,
-                        last_epoch = 0
-                    )
-checkpoint = torch.load(
-    f'../../model/conditionDiff/ST/ckpt_34_checkpoint.pt', map_location=device)
-diffusion.model.load_state_dict(checkpoint['net'])
-cemblayer.load_state_dict(checkpoint['cemblayer'])
+    optimizer=optimizer,
+    multiplier=params['multiplier'],
+    warm_epoch=10,
+    after_scheduler=cosineScheduler,
+    last_epoch=0
+)
+# checkpoint = torch.load(
+#     f'../../model/conditionDiff/ST/ckpt_34_checkpoint.pt', map_location=device)
+# diffusion.model.load_state_dict(checkpoint['net'])
+# cemblayer.load_state_dict(checkpoint['cemblayer'])
 # optimizer.load_state_dict(checkpoint['optimizer'])
 # warmUpScheduler.load_state_dict(checkpoint['scheduler'])
 checkpoint = 0
 topilimage = torchvision.transforms.ToPILImage()
 scaler = torch.cuda.amp.GradScaler()
-for epc in range(34, params['epochs']):
+for epc in range(params['epochs']):
     diffusion.model.train()
     cemblayer.train()
     total_loss = 0
@@ -233,7 +311,7 @@ for epc in range(34, params['epochs']):
                 genshape, 50, 0, 'linear', cemb=cemb)
         else:
             generated = diffusion.sample(genshape, cemb=cemb)
-        generated = transback(generated)
+        generated = transback(Generator(generated.to(device1)).to(device))
         for i in range(len(lab)):
             img_pil = topilimage(generated[i].cpu())
             img_pil.save(f'../../result/ST/{class_list[lab[i]]}/{epc}.png')
