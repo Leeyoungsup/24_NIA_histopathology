@@ -237,7 +237,7 @@ topilimage = torchvision.transforms.ToPILImage()
 diffusion.model.eval()
 cemblayer.eval()
 
-count = {key: 1230 for key in class_list}
+count = {key: 0 for key in class_list}
 while (True):
 
     # generating samples
