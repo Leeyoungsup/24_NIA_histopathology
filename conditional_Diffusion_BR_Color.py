@@ -42,7 +42,7 @@ def createDirectory(directory):
         print("Error: Failed to create the directory.")
 
 
-class_list = ['유형1', '유형2']
+class_list = ['유형8', '유형9']
 params = {'image_size': 1024,
           'lr': 5e-5,
           'beta1': 0.5,
@@ -50,12 +50,12 @@ params = {'image_size': 1024,
           'batch_size': 1,
           'epochs': 1000,
           'n_classes': None,
-          'data_path': '../../data/normalization_type/BRNT/',
+          'data_path': '../../data/normalization_type/BRIL/',
           'image_count': 5000,
           'inch': 3,
           'modch': 128,
           'outch': 3,
-          'chmul': [1, 1, 2, 2, 4, 4, 8],
+          'chmul': [1, 2, 4, 4, 4],
           'numres': 2,
           'dtype': torch.float32,
           'cdim': 256,
@@ -238,7 +238,7 @@ warmUpScheduler = GradualWarmupScheduler(
     last_epoch=0
 )
 # checkpoint = torch.load(
-#     f'../../model/conditionDiff/scratch_details/BRNT/ckpt_151_checkpoint.pt', map_location=device)
+#     f'../../model/conditionDiff/scratch_details/BRIL/ckpt_151_checkpoint.pt', map_location=device)
 # diffusion.model.load_state_dict(checkpoint['net'])
 # cemblayer.load_state_dict(checkpoint['cemblayer'])
 # optimizer.load_state_dict(checkpoint['optimizer'])
@@ -309,9 +309,9 @@ for epc in range(params['epochs']):
         for i in range(len(lab)):
             img_pil = topilimage(generated[i].cpu())
             createDirectory(
-                f'../../result/color_scratch_Detail/BRNT/{class_list[lab[i]]}')
+                f'../../result/color_scratch_Detail/BRIL/{class_list[lab[i]]}')
             img_pil.save(
-                f'../../result/color_scratch_Detail/BRNT/{class_list[lab[i]]}/{epc}.png')
+                f'../../result/color_scratch_Detail/BRIL/{class_list[lab[i]]}/{epc}.png')
 
         # save checkpoints
         checkpoint = {
@@ -322,7 +322,7 @@ for epc in range(params['epochs']):
         }
     if epc % 5 == 0:
         createDirectory(
-            f'../../model/conditionDiff/color_scratch_details/BRNT/')
+            f'../../model/conditionDiff/color_scratch_details/BRIL/')
         torch.save(
-            checkpoint, f'../../model/conditionDiff/color_scratch_details/BRNT/ckpt_{epc+1}_checkpoint.pt')
+            checkpoint, f'../../model/conditionDiff/color_scratch_details/BRIL/ckpt_{epc+1}_checkpoint.pt')
     torch.cuda.empty_cache()
