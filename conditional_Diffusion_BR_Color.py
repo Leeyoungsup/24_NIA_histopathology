@@ -24,7 +24,7 @@ from PIL import Image
 import torchvision
 import torch.nn as nn
 print(f"GPUs used:\t{torch.cuda.device_count()}")
-device = torch.device("cuda", 2)
+device = torch.device("cuda", 6)
 device1 = torch.device("cuda", 6)
 print(f"Device:\t\t{device}")
 
@@ -103,6 +103,7 @@ class CustomDataset(Dataset):
 
     def __len__(self):
         return len(self.images)
+
 
 class ResidualBlock(nn.Module):
     def __init__(self, in_features):

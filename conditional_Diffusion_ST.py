@@ -30,7 +30,7 @@ print(f"Device:\t\t{device}")
 
 class_list = ['STNT', 'STMX', 'STIN', 'STDI']
 params = {'image_size': 1024,
-          'lr': 5e-5,
+          'lr': 1e-5,
           'beta1': 0.5,
           'beta2': 0.999,
           'batch_size': 1,
@@ -244,14 +244,14 @@ optimizer = torch.optim.AdamW(
         cemblayer.parameters()
     ),
     lr=params['lr'],
-    weight_decay=1e-4
+    weight_decay=1e-6
 )
 
 cosineScheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
 warmUpScheduler = GradualWarmupScheduler(
     optimizer=optimizer,
     multiplier=params['multiplier'],
-    warm_epoch=10,
+    warm_epoch=3,
     after_scheduler=cosineScheduler,
     last_epoch=0
 )
@@ -308,7 +308,7 @@ for epc in range(params['epochs']):
                     params['image_size'], params['image_size'])
         if params['ddim']:
             generated = diffusion.ddim_sample(
-                genshape, 50, 0, 'linear', cemb=cemb)
+                genshape, 100, 0, 'quadratic', cemb=cemb)
         else:
             generated = diffusion.sample(genshape, cemb=cemb)
         generated = transback(Generator(generated.to(device1)).to(device))

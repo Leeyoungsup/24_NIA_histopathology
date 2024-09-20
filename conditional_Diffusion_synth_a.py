@@ -44,31 +44,30 @@ def createDirectory(directory):
 
 class_list = ['유형1', '유형2']
 params = {'image_size': 1024,
-          'lr': 5e-5,
+          'lr': 1e-5,
           'beta1': 0.5,
           'beta2': 0.999,
           'batch_size': 1,
           'epochs': 1000,
           'n_classes': None,
           'data_path': '../../result/synth/STNT/',
-          'image_count': 5000,
-          'inch': 1,
-          'modch': 128,
-          'outch': 1,
-          'chmul': [1, 1, 2, 2, 4, 4, 8],
+          'image_count': 10,
+          'inch': 3,
+          'modch': 32,
+          'outch': 3,
+          'chmul': [1, 2, 4, 8, 16, 32, 64],
           'numres': 2,
           'dtype': torch.float32,
-          'cdim': 256,
+          'cdim': 10,
           'useconv': False,
           'droprate': 0.1,
           'T': 1000,
           'w': 1.8,
           'v': 0.3,
-          'multiplier': 1,
-          'threshold': 0.02,
+          'multiplier': 2.5,
+          'threshold': 0.1,
           'ddim': True,
           }
-
 tf = transforms.ToTensor()
 
 
@@ -224,7 +223,7 @@ warmUpScheduler = GradualWarmupScheduler(
     last_epoch=0
 )
 checkpoint = torch.load(
-    f'../../model/conditionDiff/scratch_details/STNT/ckpt_301_checkpoint.pt', map_location=device)
+    f'../../model/conditionDiff/details/STNT/ckpt_154_checkpoint.pt', map_location=device)
 diffusion.model.load_state_dict(checkpoint['net'])
 cemblayer.load_state_dict(checkpoint['cemblayer'])
 optimizer.load_state_dict(checkpoint['optimizer'])
@@ -238,7 +237,7 @@ topilimage = torchvision.transforms.ToPILImage()
 diffusion.model.eval()
 cemblayer.eval()
 
-count = {key: 0 for key in class_list}
+count = {key: 1230 for key in class_list}
 while (True):
 
     # generating samples
@@ -259,7 +258,6 @@ while (True):
                 genshape, 100, 0.1, 'quadratic', cemb=cemb)
         else:
             generated = diffusion.sample(genshape, cemb=cemb)
-        generated = torch.cat([generated, generated, generated], dim=1)
         generated = transback(generator(generated.to(device1)))
         for i in range(len(lab)):
             img_pil = topilimage(generated[i].cpu())

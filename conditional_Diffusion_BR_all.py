@@ -253,7 +253,7 @@ cosineScheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
 warmUpScheduler = GradualWarmupScheduler(
     optimizer=optimizer,
     multiplier=params['multiplier'],
-    warm_epoch=10,
+    warm_epoch=3,
     after_scheduler=cosineScheduler,
     last_epoch=0
 )
