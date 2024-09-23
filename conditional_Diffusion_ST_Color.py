@@ -24,8 +24,8 @@ from PIL import Image
 import torchvision
 import torch.nn as nn
 print(f"GPUs used:\t{torch.cuda.device_count()}")
-device = torch.device("cuda", 2)
-device1 = torch.device("cuda", 6)
+device = torch.device("cuda", 3)
+device1 = torch.device("cuda", 3)
 print(f"Device:\t\t{device}")
 
 
@@ -42,20 +42,20 @@ def createDirectory(directory):
         print("Error: Failed to create the directory.")
 
 
-class_list = ['유형1', '유형2']
+class_list = ['유형12', '유형13', '유형14', '유형15']
 params = {'image_size': 1024,
-          'lr': 5e-5,
+          'lr': 2e-5,
           'beta1': 0.5,
           'beta2': 0.999,
           'batch_size': 1,
           'epochs': 1000,
           'n_classes': None,
-          'data_path': '../../data/normalization_type/STNT/',
+          'data_path': '../../data/normalization_type/STMX/',
           'image_count': 5000,
           'inch': 3,
           'modch': 128,
           'outch': 3,
-          'chmul': [1, 2, 4, 4, 4],
+          'chmul': [1, 1, 2, 4],
           'numres': 2,
           'dtype': torch.float32,
           'cdim': 256,
@@ -179,7 +179,7 @@ def weights_init_normal(m):
 
 Generator = Generator(3, 3).to(device1)
 Generator.load_state_dict(torch.load(
-    '../../model/cyclegan/G_B_28.pth', map_location=device1))
+    '../../model/cyclegan/G_B_33.pth', map_location=device1))
 
 image_label = []
 image_path = []
@@ -229,7 +229,7 @@ optimizer = torch.optim.AdamW(
 )
 
 
-cosineScheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.98)
+cosineScheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
 warmUpScheduler = GradualWarmupScheduler(
     optimizer=optimizer,
     multiplier=params['multiplier'],
@@ -238,8 +238,8 @@ warmUpScheduler = GradualWarmupScheduler(
     last_epoch=0
 )
 # checkpoint = torch.load(
-#     f'../../model/conditionDiff/scratch_details/STNT/ckpt_151_checkpoint.pt', map_location=device)
-# diffusion.model.load_state_dict(checkpoint['net'])
+#     f'../../model/conditionDiff/color_scratch_details/STMX/ckpt_101_checkpoint.pt', map_location=device)
+# diffusion.model.load_state_dict(checkpoint['net'], strict=False)
 # cemblayer.load_state_dict(checkpoint['cemblayer'])
 # optimizer.load_state_dict(checkpoint['optimizer'])
 # warmUpScheduler.load_state_dict(checkpoint['scheduler'])
@@ -309,9 +309,9 @@ for epc in range(params['epochs']):
         for i in range(len(lab)):
             img_pil = topilimage(generated[i].cpu())
             createDirectory(
-                f'../../result/color_scratch_Detail/STNT/{class_list[lab[i]]}')
+                f'../../result/color_scratch_Detail/STMX/{class_list[lab[i]]}')
             img_pil.save(
-                f'../../result/color_scratch_Detail/STNT/{class_list[lab[i]]}/{epc}.png')
+                f'../../result/color_scratch_Detail/STMX/{class_list[lab[i]]}/{epc}.png')
 
         # save checkpoints
         checkpoint = {
@@ -320,9 +320,9 @@ for epc in range(params['epochs']):
             'optimizer': optimizer.state_dict(),
             'scheduler': warmUpScheduler.state_dict()
         }
-    if epc % 5 == 0:
-        createDirectory(
-            f'../../model/conditionDiff/color_scratch_details/STNT/')
-        torch.save(
-            checkpoint, f'../../model/conditionDiff/color_scratch_details/STNT/ckpt_{epc+1}_checkpoint.pt')
+
+    createDirectory(
+        f'../../model/conditionDiff/color_scratch_details/STMX/')
+    torch.save(
+        checkpoint, f'../../model/conditionDiff/color_scratch_details/STMX/ckpt_{epc+1}_checkpoint.pt')
     torch.cuda.empty_cache()

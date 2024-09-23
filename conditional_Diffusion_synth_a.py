@@ -24,7 +24,7 @@ from PIL import Image
 import torchvision
 import torch.nn as nn
 print(f"GPUs used:\t{torch.cuda.device_count()}")
-device = torch.device("cuda", 6)
+device = torch.device("cuda", 3)
 device1 = torch.device("cuda", 6)
 print(f"Device:\t\t{device}")
 
@@ -43,29 +43,30 @@ def createDirectory(directory):
 
 
 class_list = ['유형1', '유형2']
+
 params = {'image_size': 1024,
-          'lr': 1e-5,
+          'lr': 2e-5,
           'beta1': 0.5,
           'beta2': 0.999,
           'batch_size': 1,
           'epochs': 1000,
           'n_classes': None,
           'data_path': '../../result/synth/STNT/',
-          'image_count': 10,
+          'image_count': 5000,
           'inch': 3,
-          'modch': 32,
+          'modch': 128,
           'outch': 3,
-          'chmul': [1, 2, 4, 8, 16, 32, 64],
+          'chmul': [1, 2, 4, 4, 4],
           'numres': 2,
           'dtype': torch.float32,
-          'cdim': 10,
+          'cdim': 256,
           'useconv': False,
           'droprate': 0.1,
           'T': 1000,
           'w': 1.8,
           'v': 0.3,
-          'multiplier': 2.5,
-          'threshold': 0.1,
+          'multiplier': 1,
+          'threshold': 0.02,
           'ddim': True,
           }
 tf = transforms.ToTensor()
@@ -179,7 +180,7 @@ def weights_init_normal(m):
 
 generator = Generator(3, 3).to(device1)
 generator.load_state_dict(torch.load(
-    '../../model/cyclegan/G_B_28.pth', map_location=device1))
+    '../../model/cyclegan/G_B_33.pth', map_location=device1))
 
 
 net = Unet(in_ch=params['inch'],
@@ -223,7 +224,7 @@ warmUpScheduler = GradualWarmupScheduler(
     last_epoch=0
 )
 checkpoint = torch.load(
-    f'../../model/conditionDiff/details/STNT/ckpt_154_checkpoint.pt', map_location=device)
+    f'../../model/conditionDiff/color_scratch_details/STNT/ckpt_106_checkpoint.pt', map_location=device)
 diffusion.model.load_state_dict(checkpoint['net'])
 cemblayer.load_state_dict(checkpoint['cemblayer'])
 optimizer.load_state_dict(checkpoint['optimizer'])
@@ -237,7 +238,7 @@ topilimage = torchvision.transforms.ToPILImage()
 diffusion.model.eval()
 cemblayer.eval()
 
-count = {key: 0 for key in class_list}
+count = {key: 1230 for key in class_list}
 while (True):
 
     # generating samples
