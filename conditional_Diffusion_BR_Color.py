@@ -25,10 +25,10 @@ import torchvision
 import torch.nn as nn
 print(f"GPUs used:\t{torch.cuda.device_count()}")
 
-device = torch.device("cuda", 6)
+device = torch.device("cuda", 4)
 print(f"Device:\t\t{device}")
-start_epc = 31
-model_path = '../../model/conditionDiff/color_scratch_details/BRID/ckpt_31_checkpoint.pt'
+start_epc = 0
+model_path = '../../model/conditionDiff/color_scratch_details/BRIL/ckpt_40_checkpoint.pt'
 
 
 def createDirectory(directory):
@@ -44,7 +44,7 @@ def createDirectory(directory):
         print("Error: Failed to create the directory.")
 
 
-class_list = ['유형10', '유형11', '유형12', '유형13', '유형14', '유형15']
+class_list = ['유형8', '유형9']
 params = {'image_size': 1024,
           'lr': 2e-5,
           'beta1': 0.5,
@@ -52,13 +52,13 @@ params = {'image_size': 1024,
           'batch_size': 1,
           'epochs': 1000,
           'n_classes': None,
-          'data_path': '../../data/normalization_type/BRID/',
+          'data_path': '../../data/normalization_type/BRIL/',
           'image_count': 5000,
           'inch': 3,
-          'modch': 128,
+          'modch': 256,
           'outch': 3,
-          'chmul': [1, 1, 2, 4, 4],
-          'numres': 2,
+          'chmul': [1, 2, 4, 8],
+          'numres': 0,
           'dtype': torch.float32,
           'cdim': 256,
           'useconv': False,
@@ -235,15 +235,15 @@ cosineScheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.98)
 warmUpScheduler = GradualWarmupScheduler(
     optimizer=optimizer,
     multiplier=params['multiplier'],
-    warm_epoch=10,
+    warm_epoch=30,
     after_scheduler=cosineScheduler,
     last_epoch=0
 )
-checkpoint = torch.load(model_path, map_location=device)
-diffusion.model.load_state_dict(checkpoint['net'])
-cemblayer.load_state_dict(checkpoint['cemblayer'])
-optimizer.load_state_dict(checkpoint['optimizer'])
-warmUpScheduler.load_state_dict(checkpoint['scheduler'])
+# checkpoint = torch.load(model_path, map_location=device)
+# diffusion.model.load_state_dict(checkpoint['net'])
+# cemblayer.load_state_dict(checkpoint['cemblayer'])
+# optimizer.load_state_dict(checkpoint['optimizer'])
+# warmUpScheduler.load_state_dict(checkpoint['scheduler'])
 
 
 # generator = GeneratorUNet()
@@ -310,9 +310,9 @@ for epc in range(start_epc, params['epochs']):
         for i in range(len(lab)):
             img_pil = topilimage(generated[i].cpu())
             createDirectory(
-                f'../../result/color_scratch_Detail/BRID/{class_list[lab[i]]}')
+                f'../../result/color_scratch_Detail/BRIL/{class_list[lab[i]]}')
             img_pil.save(
-                f'../../result/color_scratch_Detail/BRID/{class_list[lab[i]]}/{epc}.png')
+                f'../../result/color_scratch_Detail/BRIL/{class_list[lab[i]]}/{epc}.png')
 
         # save checkpoints
         checkpoint = {
@@ -323,7 +323,7 @@ for epc in range(start_epc, params['epochs']):
         }
 
     createDirectory(
-        f'../../model/conditionDiff/color_scratch_details/BRID/')
+        f'../../model/conditionDiff/color_scratch_details/BRIL/')
     torch.save(
-        checkpoint, f'../../model/conditionDiff/color_scratch_details/BRID/ckpt_{epc+1}_checkpoint.pt')
+        checkpoint, f'../../model/conditionDiff/color_scratch_details/BRIL/ckpt_{epc+1}_checkpoint.pt')
     torch.cuda.empty_cache()
