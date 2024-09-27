@@ -24,9 +24,11 @@ from PIL import Image
 import torchvision
 import torch.nn as nn
 print(f"GPUs used:\t{torch.cuda.device_count()}")
-device = torch.device("cuda", 4)
-device1 = torch.device("cuda", 6)
+
+device = torch.device("cuda", 6)
 print(f"Device:\t\t{device}")
+start_epc = 31
+model_path = '../../model/conditionDiff/color_scratch_details/BRID/ckpt_31_checkpoint.pt'
 
 
 def createDirectory(directory):
@@ -42,20 +44,20 @@ def createDirectory(directory):
         print("Error: Failed to create the directory.")
 
 
-class_list = ['유형1', '유형2']
+class_list = ['유형10', '유형11', '유형12', '유형13', '유형14', '유형15']
 params = {'image_size': 1024,
-          'lr': 5e-5,
+          'lr': 2e-5,
           'beta1': 0.5,
           'beta2': 0.999,
           'batch_size': 1,
           'epochs': 1000,
           'n_classes': None,
-          'data_path': '../../data/normalization_type/BRNT/',
+          'data_path': '../../data/normalization_type/BRID/',
           'image_count': 5000,
           'inch': 3,
           'modch': 128,
           'outch': 3,
-          'chmul': [1, 2, 4, 4, 4],
+          'chmul': [1, 1, 2, 4, 4],
           'numres': 2,
           'dtype': torch.float32,
           'cdim': 256,
@@ -177,9 +179,9 @@ def weights_init_normal(m):
         torch.nn.init.constant_(m.bias.data, 0.0)
 
 
-Generator = Generator(3, 3).to(device1)
+Generator = Generator(3, 3).to(device)
 Generator.load_state_dict(torch.load(
-    '../../model/cyclegan/G_B_28.pth', map_location=device1))
+    '../../model/cyclegan/G_B_29.pth', map_location=device))
 
 image_label = []
 image_path = []
@@ -233,29 +235,28 @@ cosineScheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.98)
 warmUpScheduler = GradualWarmupScheduler(
     optimizer=optimizer,
     multiplier=params['multiplier'],
-    warm_epoch=30,
+    warm_epoch=10,
     after_scheduler=cosineScheduler,
     last_epoch=0
 )
-# checkpoint = torch.load(
-#     f'../../model/conditionDiff/scratch_details/BRNT/ckpt_151_checkpoint.pt', map_location=device)
-# diffusion.model.load_state_dict(checkpoint['net'])
-# cemblayer.load_state_dict(checkpoint['cemblayer'])
-# optimizer.load_state_dict(checkpoint['optimizer'])
-# warmUpScheduler.load_state_dict(checkpoint['scheduler'])
+checkpoint = torch.load(model_path, map_location=device)
+diffusion.model.load_state_dict(checkpoint['net'])
+cemblayer.load_state_dict(checkpoint['cemblayer'])
+optimizer.load_state_dict(checkpoint['optimizer'])
+warmUpScheduler.load_state_dict(checkpoint['scheduler'])
 
 
 # generator = GeneratorUNet()
-# generator.to(device1)
+# generator.to(device)
 # generator.load_state_dict(torch.load(
-#     '../../model/colorization/pix2pix_r/Pix2Pix_Generator_for_Colorization_360.pt', map_location=device1))
+#     '../../model/colorization/pix2pix_r/Pix2Pix_Generator_for_Colorization_360.pt', map_location=device))
 
 
 checkpoint = 0
 
 scaler = torch.cuda.amp.GradScaler()
 topilimage = torchvision.transforms.ToPILImage()
-for epc in range(params['epochs']):
+for epc in range(start_epc, params['epochs']):
     diffusion.model.train()
     cemblayer.train()
     total_loss = 0
@@ -302,16 +303,16 @@ for epc in range(params['epochs']):
                     params['image_size'], params['image_size'])
         if params['ddim']:
             generated = diffusion.ddim_sample(
-                genshape, 100, 0.1, 'quadratic', cemb=cemb)
+                genshape, 100, 0.0, 'quadratic', cemb=cemb)
         else:
             generated = diffusion.sample(genshape, cemb=cemb)
-        generated = transback(Generator(generated.to(device1)).to(device))
+        generated = transback(Generator(generated.to(device)).to(device))
         for i in range(len(lab)):
             img_pil = topilimage(generated[i].cpu())
             createDirectory(
-                f'../../result/color_scratch_Detail/BRNT/{class_list[lab[i]]}')
+                f'../../result/color_scratch_Detail/BRID/{class_list[lab[i]]}')
             img_pil.save(
-                f'../../result/color_scratch_Detail/BRNT/{class_list[lab[i]]}/{epc}.png')
+                f'../../result/color_scratch_Detail/BRID/{class_list[lab[i]]}/{epc}.png')
 
         # save checkpoints
         checkpoint = {
@@ -320,9 +321,9 @@ for epc in range(params['epochs']):
             'optimizer': optimizer.state_dict(),
             'scheduler': warmUpScheduler.state_dict()
         }
-    if epc % 5 == 0:
-        createDirectory(
-            f'../../model/conditionDiff/color_scratch_details/BRNT/')
-        torch.save(
-            checkpoint, f'../../model/conditionDiff/color_scratch_details/BRNT/ckpt_{epc+1}_checkpoint.pt')
+
+    createDirectory(
+        f'../../model/conditionDiff/color_scratch_details/BRID/')
+    torch.save(
+        checkpoint, f'../../model/conditionDiff/color_scratch_details/BRID/ckpt_{epc+1}_checkpoint.pt')
     torch.cuda.empty_cache()
