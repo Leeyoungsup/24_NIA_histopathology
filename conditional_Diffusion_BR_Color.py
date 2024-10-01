@@ -28,7 +28,7 @@ print(f"GPUs used:\t{torch.cuda.device_count()}")
 device = torch.device("cuda", 4)
 print(f"Device:\t\t{device}")
 start_epc = 142
-model_path = '../../model/conditionDiff/color_scratch_details/STNT/ckpt_133_checkpoint.pt'
+model_path = '../../model/conditionDiff/color_scratch_details/BRIL/ckpt_142_checkpoint.pt'
 
 
 def createDirectory(directory):
@@ -44,7 +44,7 @@ def createDirectory(directory):
         print("Error: Failed to create the directory.")
 
 
-class_list = ['유형1', '유형2']
+class_list = ['유형8', '유형9']
 params = {'image_size': 1024,
           'lr': 2e-5,
           'beta1': 0.5,
@@ -52,7 +52,7 @@ params = {'image_size': 1024,
           'batch_size': 1,
           'epochs': 1000,
           'n_classes': None,
-          'data_path': '../../data/normalization_type/STNT/',
+          'data_path': '../../data/normalization_type/BRIL/',
           'image_count': 5000,
           'inch': 3,
           'modch': 128,
@@ -310,9 +310,9 @@ for epc in range(start_epc, params['epochs']):
         for i in range(len(lab)):
             img_pil = topilimage(generated[i].cpu())
             createDirectory(
-                f'../../result/color_scratch_Detail/STNT/{class_list[lab[i]]}')
+                f'../../result/color_scratch_Detail/BRIL/{class_list[lab[i]]}')
             img_pil.save(
-                f'../../result/color_scratch_Detail/STNT/{class_list[lab[i]]}/{epc}.png')
+                f'../../result/color_scratch_Detail/BRIL/{class_list[lab[i]]}/{epc}.png')
 
         # save checkpoints
         checkpoint = {
@@ -323,7 +323,7 @@ for epc in range(start_epc, params['epochs']):
         }
 
     createDirectory(
-        f'../../model/conditionDiff/color_scratch_details/STNT/')
+        f'../../model/conditionDiff/color_scratch_details/BRIL/')
     torch.save(
-        checkpoint, f'../../model/conditionDiff/color_scratch_details/STNT/ckpt_{epc+1}_checkpoint.pt')
+        checkpoint, f'../../model/conditionDiff/color_scratch_details/BRIL/ckpt_{epc+1}_checkpoint.pt')
     torch.cuda.empty_cache()
