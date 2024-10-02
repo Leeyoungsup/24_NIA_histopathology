@@ -25,7 +25,7 @@ import torchvision
 import torch.nn as nn
 print(f"GPUs used:\t{torch.cuda.device_count()}")
 
-device = torch.device("cuda", 4)
+device = torch.device("cuda", 0)
 print(f"Device:\t\t{device}")
 start_epc = 142
 model_path = '../../model/conditionDiff/color_scratch_details/BRIL/ckpt_142_checkpoint.pt'
@@ -239,11 +239,11 @@ warmUpScheduler = GradualWarmupScheduler(
     after_scheduler=cosineScheduler,
     last_epoch=0
 )
-checkpoint = torch.load(model_path, map_location=device)
-diffusion.model.load_state_dict(checkpoint['net'])
-cemblayer.load_state_dict(checkpoint['cemblayer'])
-optimizer.load_state_dict(checkpoint['optimizer'])
-warmUpScheduler.load_state_dict(checkpoint['scheduler'])
+# checkpoint = torch.load(model_path, map_location=device)
+# diffusion.model.load_state_dict(checkpoint['net'])
+# cemblayer.load_state_dict(checkpoint['cemblayer'])
+# optimizer.load_state_dict(checkpoint['optimizer'])
+# warmUpScheduler.load_state_dict(checkpoint['scheduler'])
 
 
 # generator = GeneratorUNet()

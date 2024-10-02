@@ -24,7 +24,7 @@ from PIL import Image
 import torchvision
 import torch.nn as nn
 print(f"GPUs used:\t{torch.cuda.device_count()}")
-device = torch.device("cuda", 4)
+device = torch.device("cuda", 5)
 print(f"Device:\t\t{device}")
 
 
@@ -50,12 +50,12 @@ params = {'image_size': 1024,
           'batch_size': 1,
           'epochs': 1000,
           'n_classes': None,
-          'data_path': '../../result/synth/STIN/',
+          'data_path': '../../result/synth/BRNT/',
           'image_count': 5000,
           'inch': 3,
           'modch': 128,
           'outch': 3,
-          'chmul': [1, 2, 4, 4, 4],
+          'chmul': [1, 1, 2, 4, 4],
           'numres': 2,
           'dtype': torch.float32,
           'cdim': 256,
@@ -223,7 +223,7 @@ warmUpScheduler = GradualWarmupScheduler(
     last_epoch=0
 )
 checkpoint = torch.load(
-    f'../../model/conditionDiff/color_scratch_details/STIN/ckpt_133_checkpoint.pt', map_location=device)
+    f'../../model/conditionDiff/color_scratch_details/BRNT/ckpt_59_checkpoint.pt', map_location=device)
 diffusion.model.load_state_dict(checkpoint['net'])
 cemblayer.load_state_dict(checkpoint['cemblayer'])
 optimizer.load_state_dict(checkpoint['optimizer'])
@@ -237,7 +237,7 @@ topilimage = torchvision.transforms.ToPILImage()
 diffusion.model.eval()
 cemblayer.eval()
 
-count = {key: 1235 for key in class_list}
+count = {key: 3860 for key in class_list}
 while (True):
 
     # generating samples
@@ -247,7 +247,7 @@ while (True):
     each_device_batch = len(class_list)*5
     with torch.no_grad():
         lab = torch.ones(len(class_list), each_device_batch // len(class_list)).type(torch.long) \
-            * torch.arange(start=1, end=len(class_list)).reshape(-1, 1)
+            * torch.arange(start=0, end=len(class_list)).reshape(-1, 1)
         # lab = torch.tensor([[0, 1, 4, 5], [0, 1, 4, 5]], dtype=torch.long)
         lab = lab.reshape(-1, 1).squeeze()
         lab = lab.to(device)
@@ -265,7 +265,7 @@ while (True):
             createDirectory(
                 params['data_path']+f'{class_list[lab[i]]}')
             img_pil.save(
-                params['data_path']+f'{class_list[lab[i]]}/NIA_S_STIN_{class_list[lab[i]][2:]}_{str(count[class_list[lab[i]]]).zfill(6)}.jpeg')
+                params['data_path']+f'{class_list[lab[i]]}/NIA_S_BRNT_{class_list[lab[i]][2:]}_{str(count[class_list[lab[i]]]).zfill(6)}.jpeg')
             count[class_list[lab[i]]] += 1
 
     torch.cuda.empty_cache()
