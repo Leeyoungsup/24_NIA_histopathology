@@ -71,7 +71,7 @@ def expand2square(pil_img, background_color):
         return result
 
 
-img_path = '../../data/area_segmentation/_BRID/image/'
+img_path = '../../data/area_segmentation/_BRDC/image/'
 img_list = glob(img_path+'*.jpeg')
 mask_list = [i.replace('/image', '/mask/npy') for i in img_list]
 mask_list = [i.replace('.jpeg', '.npy') for i in mask_list]
@@ -221,12 +221,12 @@ for epoch in range(1000):
         val_acc_list.append((acc_loss/count))
 
     if MIN_loss > (val_running_loss/count):
-        createDirectory('../../model/synth_autolabel/_BRID/')
+        createDirectory('../../model/synth_autolabel/_BRDC/')
         torch.save(model.state_dict(),
-                   '../../model/synth_autolabel/_BRID/check.pt')
+                   '../../model/synth_autolabel/_BRDC/check.pt')
         MIN_loss = (val_running_loss/count)
     torch.save(model.state_dict(),
-               '../../model/synth_autolabel/_BRID/'+str(epoch)+'.pt')
+               '../../model/synth_autolabel/_BRDC/'+str(epoch)+'.pt')
     pred_mask1 = torch.argmax(predict[0], 0).cpu()
     pred_mask = torch.zeros((3, img_size, img_size))
     pred_mask[0] += torch.where(pred_mask1 == 0, 1, 0)
@@ -243,7 +243,7 @@ for epoch in range(1000):
     label_mask[1] += torch.where(label_mask1 == 3, 1, 0)
     label_overlay = x[0].cpu()*0.7+label_mask*0.3
     pred_overlay = x[0].cpu()*0.7+pred_mask*0.3
-    createDirectory('../../result/synth_autolabel/_BRID/')
+    createDirectory('../../result/synth_autolabel/_BRDC/')
     topilimage(torch.concat((label_overlay, pred_overlay), 2)).save(
-        '../../result/synth_autolabel/_BRID/'+str(epoch)+'.jpeg')
-torch.save(model.state_dict(), '../../model/synth_autolabel/_BRID/final.pt')
+        '../../result/synth_autolabel/_BRDC/'+str(epoch)+'.jpeg')
+torch.save(model.state_dict(), '../../model/synth_autolabel/_BRDC/final.pt')
