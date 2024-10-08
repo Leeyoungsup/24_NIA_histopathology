@@ -40,7 +40,7 @@ device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
 batch_size = 1
 img_size = 1024
 
-carcinoma = 'BRID'
+carcinoma = 'BRLC'
 class_list = ['NT_stroma', 'NT_epithelial',
               'NT_immune',
               'Tumor',]
