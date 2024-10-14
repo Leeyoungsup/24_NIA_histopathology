@@ -24,7 +24,7 @@ from PIL import Image
 import torchvision
 import torch.nn as nn
 print(f"GPUs used:\t{torch.cuda.device_count()}")
-device = torch.device("cuda", 2)
+device = torch.device("cuda", 3)
 print(f"Device:\t\t{device}")
 
 
@@ -41,7 +41,7 @@ def createDirectory(directory):
         print("Error: Failed to create the directory.")
 
 
-class_list = ['유형1', '유형2']
+class_list = ['유형8', '유형9']
 
 params = {'image_size': 1024,
           'lr': 2e-5,
@@ -50,12 +50,12 @@ params = {'image_size': 1024,
           'batch_size': 1,
           'epochs': 1000,
           'n_classes': None,
-          'data_path': '../../result/synth/STNT/',
+          'data_path': '../../result/synth/BRIL/',
           'image_count': 5000,
           'inch': 3,
           'modch': 128,
           'outch': 3,
-          'chmul': [1, 2, 4, 4, 4],
+          'chmul': [1, 1, 2, 4, 4],
           'numres': 2,
           'dtype': torch.float32,
           'cdim': 256,
@@ -223,7 +223,7 @@ warmUpScheduler = GradualWarmupScheduler(
     last_epoch=0
 )
 checkpoint = torch.load(
-    f'../../model/conditionDiff/color_scratch_details/STNT/ckpt_133_checkpoint.pt', map_location=device)
+    f'../../model/conditionDiff/color_scratch_details/BRIL/ckpt_207_checkpoint.pt', map_location=device)
 diffusion.model.load_state_dict(checkpoint['net'])
 cemblayer.load_state_dict(checkpoint['cemblayer'])
 optimizer.load_state_dict(checkpoint['optimizer'])
@@ -237,18 +237,17 @@ topilimage = torchvision.transforms.ToPILImage()
 diffusion.model.eval()
 cemblayer.eval()
 
-count = {key: 100000 for key in class_list}
+count = {key: 102160 for key in class_list}
 while (True):
 
     # generating samples
     # The model generate 80 pictures(8 per row) each time
     # pictures of same row belong to the same class
     all_samples = []
-    each_device_batch = len(class_list)*3
+    each_device_batch = len(class_list)*5
     with torch.no_grad():
-        lab = torch.ones(len(class_list), each_device_batch // len(class_list)).type(torch.long) \
-            * torch.arange(start=1, end=len(class_list)).reshape(-1, 1)
-        # lab = torch.tensor([[0, 1, 4, 5], [0, 1, 4, 5]], dtype=torch.long)
+        lab = torch.ones(len(class_list), each_device_batch // len(class_list)).type(torch.long)* torch.arange(start=0, end=len(class_list)).reshape(-1, 1)
+        # lab = torch.tensor([[1, 2, 1, 2], [1, 2,1, 2]], dtype=torch.long)
         lab = lab.reshape(-1, 1).squeeze()
         lab = lab.to(device)
         cemb = cemblayer(lab)
@@ -265,7 +264,7 @@ while (True):
             createDirectory(
                 params['data_path']+f'{class_list[lab[i]]}')
             img_pil.save(
-                params['data_path']+f'{class_list[lab[i]]}/NIA_S_STNT_{class_list[lab[i]][2:]}_{str(count[class_list[lab[i]]]).zfill(6)}.jpeg')
+                params['data_path']+f'{class_list[lab[i]]}/NIA_S_BRIL_{class_list[lab[i]][2:]}_{str(count[class_list[lab[i]]]).zfill(6)}.jpeg')
             count[class_list[lab[i]]] += 1
 
     torch.cuda.empty_cache()
