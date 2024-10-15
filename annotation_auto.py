@@ -36,11 +36,11 @@ from shapely.geometry import Polygon, MultiPolygon
 import cv2
 import xml.etree.ElementTree as ET
 from scipy.ndimage import gaussian_filter
-device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:4" if torch.cuda.is_available() else "cpu")
 batch_size = 1
 img_size = 1024
 
-carcinoma = 'BRLC'
+carcinoma = 'STNT'
 class_list = ['NT_stroma', 'NT_epithelial',
               'NT_immune',
               'Tumor',]
@@ -111,9 +111,9 @@ def mask2polygon(mask):
 
     if Tumor_poly != None:
         for polygon in Tumor_poly.geoms:
-            if polygon.area > 5000:
-                exterior_coords = np.array(polygon.exterior.coords)
-                Tumor_polygon_arrays.append(exterior_coords)
+            
+            exterior_coords = np.array(polygon.exterior.coords)
+            Tumor_polygon_arrays.append(exterior_coords)
 
     if NT_stroma_poly != None:
         for polygon in NT_stroma_poly.geoms:
@@ -128,9 +128,9 @@ def mask2polygon(mask):
 
     if NT_epithelial_poly != None:
         for polygon in NT_epithelial_poly.geoms:
-            if polygon.area > 5000:
-                exterior_coords = np.array(polygon.exterior.coords)
-                NT_epithelial_polygon_arrays.append(exterior_coords)
+          
+            exterior_coords = np.array(polygon.exterior.coords)
+            NT_epithelial_polygon_arrays.append(exterior_coords)
 
     return NT_stroma_polygon_arrays, NT_epithelial_polygon_arrays, NT_immune_polygon_arrays, Tumor_polygon_arrays
 
@@ -211,9 +211,9 @@ def polygon2mask(image_shape, NT_stroma_polygons, NT_epithelial_polygons, NT_imm
     return mask
 
 
-image_list = glob('../../result/synth_choice/_'+carcinoma+'/**/*.jpeg')
+image_list = glob('../../result/synth_choice/'+carcinoma+'/**/*.jpeg')
 random.shuffle(image_list)
-xml_path = '../../result/synth_choice1/_'+carcinoma+'/'
+xml_path = '../../result/synth_choice/'+carcinoma+'/'
 category_list = [os.path.basename(os.path.dirname(f)) for f in image_list]
 
 
@@ -304,11 +304,6 @@ with torch.no_grad():
         mask[..., 1] = cv2.morphologyEx(pred_softmax[1], cv2.MORPH_OPEN, k)*255
         mask[..., 2] = cv2.morphologyEx(pred_softmax[2], cv2.MORPH_OPEN, k)*255
         mask[..., 3] = cv2.morphologyEx(pred_softmax[3], cv2.MORPH_OPEN, k)*255
-        # mask1=smooth_multiclass_mask(mask)
-        # mask[...,0]=np.where(mask1.argmax(axis=2)==0,255,0)
-        # mask[...,1]=np.where(mask1.argmax(axis=2)==1,255,0)
-        # mask[...,2]=np.where(mask1.argmax(axis=2)==2,255,0)
-        # mask[...,3]=np.where(mask1.argmax(axis=2)==3,255,0)
         NT_stroma_polygons, NT_epithelial_polygons, NT_immune_polygons, Tumor_polygons = mask2polygon(
             mask)
         label_polygon = [NT_epithelial_polygons,
@@ -317,16 +312,14 @@ with torch.no_grad():
             os.path.basename(path).split('.')[0]+'.xml'
         createDirectory(xml_path+label+'/')
         polygon2asap(label_polygon, class_list1, save_path)
-        # mask2=polygon2mask((1024,1024),NT_stroma_polygons,NT_epithelial_polygons,NT_immune_polygons,Tumor_polygons)
-        # mask1[...,0]+=mask2[...,1]
-        # mask1[...,1]+=mask2[...,2]
-        # mask1[...,2]+=mask2[...,3]
-        # image=x.squeeze().permute(1,2,0).numpy()
-        # image=image*255
-        # overlay=image*0.8+mask1*0.2
-        # overlay=overlay.astype(np.uint8)
-        # overlay=Image.fromarray(overlay)
-        # createDirectory('../../result/synth_choice_autolabel/overlay/'+carcinoma+'/'+label+'/')
-        # overlay.save('../../result/synth_choice_autolabel/overlay/'+carcinoma+'/'+label+'/'+os.path.basename(path))
-        # if count==100:
-        #     break
+        mask2=polygon2mask((1024,1024),NT_stroma_polygons,NT_epithelial_polygons,NT_immune_polygons,Tumor_polygons)
+        mask1[...,0]+=mask2[...,1]
+        mask1[...,1]+=mask2[...,2]
+        mask1[...,2]+=mask2[...,3]
+        image=x.squeeze().permute(1,2,0).numpy()
+        image=image*255
+        overlay=image*0.8+mask1*0.2
+        overlay=overlay.astype(np.uint8)
+        overlay=Image.fromarray(overlay)
+        createDirectory('../../result/synth_choice_autolabel/overlay/'+carcinoma+'/'+label+'/')
+        overlay.save('../../result/synth_choice_autolabel/overlay/'+carcinoma+'/'+label+'/'+os.path.basename(path))

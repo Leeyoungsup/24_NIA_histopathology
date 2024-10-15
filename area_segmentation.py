@@ -34,7 +34,7 @@ import torch
 import torch.nn as nn
 from timm import create_model
 import cv2
-device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:4" if torch.cuda.is_available() else "cpu")
 batch_size = 4
 img_size = 1024
 class_list = ['NT_stroma', 'NT_epithelial',
@@ -71,7 +71,7 @@ def expand2square(pil_img, background_color):
         return result
 
 
-img_path = '../../data/area_segmentation/_BRDC/image/'
+img_path = '../../data/area_segmentation/_STMX/image/'
 img_list = glob(img_path+'*.jpeg')
 mask_list = [i.replace('/image', '/mask/npy') for i in img_list]
 mask_list = [i.replace('.jpeg', '.npy') for i in mask_list]
@@ -221,12 +221,12 @@ for epoch in range(1000):
         val_acc_list.append((acc_loss/count))
 
     if MIN_loss > (val_running_loss/count):
-        createDirectory('../../model/synth_autolabel/_BRDC/')
+        createDirectory('../../model/synth_autolabel/_STMX/')
         torch.save(model.state_dict(),
-                   '../../model/synth_autolabel/_BRDC/check.pt')
+                   '../../model/synth_autolabel/_STMX/check.pt')
         MIN_loss = (val_running_loss/count)
     torch.save(model.state_dict(),
-               '../../model/synth_autolabel/_BRDC/'+str(epoch)+'.pt')
+               '../../model/synth_autolabel/_STMX/'+str(epoch)+'.pt')
     pred_mask1 = torch.argmax(predict[0], 0).cpu()
     pred_mask = torch.zeros((3, img_size, img_size))
     pred_mask[0] += torch.where(pred_mask1 == 0, 1, 0)
@@ -243,7 +243,7 @@ for epoch in range(1000):
     label_mask[1] += torch.where(label_mask1 == 3, 1, 0)
     label_overlay = x[0].cpu()*0.7+label_mask*0.3
     pred_overlay = x[0].cpu()*0.7+pred_mask*0.3
-    createDirectory('../../result/synth_autolabel/_BRDC/')
+    createDirectory('../../result/synth_autolabel/_STMX/')
     topilimage(torch.concat((label_overlay, pred_overlay), 2)).save(
-        '../../result/synth_autolabel/_BRDC/'+str(epoch)+'.jpeg')
-torch.save(model.state_dict(), '../../model/synth_autolabel/_BRDC/final.pt')
+        '../../result/synth_autolabel/_STMX/'+str(epoch)+'.jpeg')
+torch.save(model.state_dict(), '../../model/synth_autolabel/_STMX/final.pt')
