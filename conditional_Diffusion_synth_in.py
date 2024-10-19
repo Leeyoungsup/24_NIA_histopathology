@@ -24,7 +24,7 @@ from PIL import Image
 import torchvision
 import torch.nn as nn
 print(f"GPUs used:\t{torch.cuda.device_count()}")
-device = torch.device("cuda", 6)
+device = torch.device("cuda", 5)
 print(f"Device:\t\t{device}")
 
 
@@ -237,7 +237,7 @@ topilimage = torchvision.transforms.ToPILImage()
 diffusion.model.eval()
 cemblayer.eval()
 
-count = {key: 200000 for key in class_list}
+count = {key: 400000 for key in class_list}
 while (True):
 
     # generating samples

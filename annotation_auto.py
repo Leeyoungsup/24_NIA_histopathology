@@ -36,7 +36,7 @@ from shapely.geometry import Polygon, MultiPolygon
 import cv2
 import xml.etree.ElementTree as ET
 from scipy.ndimage import gaussian_filter
-device = torch.device("cuda:4" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:6" if torch.cuda.is_available() else "cpu")
 batch_size = 1
 img_size = 1024
 
@@ -211,9 +211,9 @@ def polygon2mask(image_shape, NT_stroma_polygons, NT_epithelial_polygons, NT_imm
     return mask
 
 
-image_list = glob('../../result/synth_choice/'+carcinoma+'/**/*.jpeg')
+image_list = glob('../../result/xml_err_jpeg2/_'+carcinoma+'/**/*.jpeg')
 random.shuffle(image_list)
-xml_path = '../../result/synth_choice/'+carcinoma+'/'
+xml_path = '../../result/xml_err_jpeg2/_'+carcinoma+'/'
 category_list = [os.path.basename(os.path.dirname(f)) for f in image_list]
 
 
