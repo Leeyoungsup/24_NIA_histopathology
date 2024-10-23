@@ -40,7 +40,7 @@ device = torch.device("cuda:6" if torch.cuda.is_available() else "cpu")
 batch_size = 1
 img_size = 1024
 
-carcinoma = 'STNT'
+carcinoma = 'STIN'
 class_list = ['NT_stroma', 'NT_epithelial',
               'NT_immune',
               'Tumor',]
@@ -211,9 +211,9 @@ def polygon2mask(image_shape, NT_stroma_polygons, NT_epithelial_polygons, NT_imm
     return mask
 
 
-image_list = glob('../../result/xml_err_jpeg2/_'+carcinoma+'/**/*.jpeg')
+image_list = glob('../../result/synth_1/'+carcinoma+'/**/*.jpeg')
 random.shuffle(image_list)
-xml_path = '../../result/xml_err_jpeg2/_'+carcinoma+'/'
+xml_path = '../../result/synth_1/'+carcinoma+'/'
 category_list = [os.path.basename(os.path.dirname(f)) for f in image_list]
 
 
@@ -312,14 +312,14 @@ with torch.no_grad():
             os.path.basename(path).split('.')[0]+'.xml'
         createDirectory(xml_path+label+'/')
         polygon2asap(label_polygon, class_list1, save_path)
-        mask2=polygon2mask((1024,1024),NT_stroma_polygons,NT_epithelial_polygons,NT_immune_polygons,Tumor_polygons)
-        mask1[...,0]+=mask2[...,1]
-        mask1[...,1]+=mask2[...,2]
-        mask1[...,2]+=mask2[...,3]
-        image=x.squeeze().permute(1,2,0).numpy()
-        image=image*255
-        overlay=image*0.8+mask1*0.2
-        overlay=overlay.astype(np.uint8)
-        overlay=Image.fromarray(overlay)
-        createDirectory('../../result/synth_choice_autolabel/overlay/'+carcinoma+'/'+label+'/')
-        overlay.save('../../result/synth_choice_autolabel/overlay/'+carcinoma+'/'+label+'/'+os.path.basename(path))
+        # mask2=polygon2mask((1024,1024),NT_stroma_polygons,NT_epithelial_polygons,NT_immune_polygons,Tumor_polygons)
+        # mask1[...,0]+=mask2[...,1]
+        # mask1[...,1]+=mask2[...,2]
+        # mask1[...,2]+=mask2[...,3]
+        # image=x.squeeze().permute(1,2,0).numpy()
+        # image=image*255
+        # overlay=image*0.8+mask1*0.2
+        # overlay=overlay.astype(np.uint8)
+        # overlay=Image.fromarray(overlay)
+        # createDirectory('../../result/synth_choice_autolabel/overlay/'+carcinoma+'/'+label+'/')
+        # overlay.save('../../result/synth_choice_autolabel/overlay/'+carcinoma+'/'+label+'/'+os.path.basename(path))

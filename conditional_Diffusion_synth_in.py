@@ -237,7 +237,7 @@ topilimage = torchvision.transforms.ToPILImage()
 diffusion.model.eval()
 cemblayer.eval()
 
-count = {key: 400000 for key in class_list}
+count = {key: 500000 for key in class_list}
 while (True):
 
     # generating samples
@@ -246,13 +246,12 @@ while (True):
     all_samples = []
     each_device_batch = len(class_list)*2
     with torch.no_grad():
-        lab = torch.ones(len(class_list), each_device_batch // len(class_list)).type(torch.long) \
-            * torch.arange(start=0, end=len(class_list)).reshape(-1, 1)
-        # lab = torch.tensor([[0, 1, 4, 5], [0, 1, 4, 5]], dtype=torch.long)
+        # lab = torch.ones(len(class_list), each_device_batch // len(class_list)).type(torch.long)  * torch.arange(start=0, end=len(class_list)).reshape(-1, 1)
+        lab = torch.tensor([[1,1, 1, 1], [1, 1, 1, 1]], dtype=torch.long)
         lab = lab.reshape(-1, 1).squeeze()
         lab = lab.to(device)
         cemb = cemblayer(lab)
-        genshape = (each_device_batch, params['outch'],
+        genshape = (len(lab), params['outch'],
                     params['image_size'], params['image_size'])
         if params['ddim']:
             generated = diffusion.ddim_sample(

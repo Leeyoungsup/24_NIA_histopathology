@@ -443,7 +443,7 @@ for epoch in range(params['epochs']):
             
             val.set_description(f"val epoch: {epoch+1}/{params['epochs']} Step: {val_count} loss : {val_loss/val_count:.4f} BLEU-1: {val_bleu_score/(val_count):.4f}")
     if val_bleu_score/val_count>sum_loss:
-        sum_loss=val_bleu_score/(val_count*8)
+        sum_loss=val_bleu_score/val_count
         torch.save(encoder.state_dict(), '../../model/captioning/BR_encoder_check.pth')
         torch.save(decoder.state_dict(), '../../model/captioning/BR_decoder_check.pth')
         
