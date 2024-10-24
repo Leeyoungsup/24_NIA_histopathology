@@ -41,7 +41,7 @@ def createDirectory(directory):
         print("Error: Failed to create the directory.")
 
 
-class_list = ['유형3', '유형4','유형5', '유형6']
+class_list = ['유형12', '유형13','유형14', '유형15']
 
 params = {'image_size': 1024,
           'lr': 2e-5,
@@ -50,7 +50,7 @@ params = {'image_size': 1024,
           'batch_size': 1,
           'epochs': 1000,
           'n_classes': None,
-          'data_path': '../../result/synth/STIN/',
+          'data_path': '../../result/synth/STMX/',
           'image_count': 5000,
           'inch': 3,
           'modch': 128,
@@ -223,7 +223,7 @@ warmUpScheduler = GradualWarmupScheduler(
     last_epoch=0
 )
 checkpoint = torch.load(
-    f'../../model/conditionDiff/color_scratch_details/STIN/ckpt_128_checkpoint.pt', map_location=device)
+    f'../../model/conditionDiff/color_scratch_details/STMX/ckpt_101_checkpoint.pt', map_location=device)
 diffusion.model.load_state_dict(checkpoint['net'])
 cemblayer.load_state_dict(checkpoint['cemblayer'])
 optimizer.load_state_dict(checkpoint['optimizer'])
@@ -247,7 +247,7 @@ while (True):
     each_device_batch = len(class_list)*5
     with torch.no_grad():
         # lab = torch.ones(len(class_list), each_device_batch // len(class_list)).type(torch.long)* torch.arange(start=0, end=len(class_list)).reshape(-1, 1)
-        lab = torch.tensor([[2, 2, 2, 2], [2, 2,2, 2]], dtype=torch.long)
+        lab = torch.tensor([[1, 2, 3, 3], [1, 2,3, 3]], dtype=torch.long)
         lab = lab.reshape(-1, 1).squeeze()
         lab = lab.to(device)
         cemb = cemblayer(lab)
@@ -264,7 +264,7 @@ while (True):
             createDirectory(
                 params['data_path']+f'{class_list[lab[i]]}')
             img_pil.save(
-                params['data_path']+f'{class_list[lab[i]]}/NIA_S_STIN_{class_list[lab[i]][2:]}_{str(count[class_list[lab[i]]]).zfill(6)}.jpeg')
+                params['data_path']+f'{class_list[lab[i]]}/NIA_S_STMX_{class_list[lab[i]][2:]}_{str(count[class_list[lab[i]]]).zfill(6)}.jpeg')
             count[class_list[lab[i]]] += 1
 
     torch.cuda.empty_cache()

@@ -211,9 +211,9 @@ def polygon2mask(image_shape, NT_stroma_polygons, NT_epithelial_polygons, NT_imm
     return mask
 
 
-image_list = glob('../../result/synth_1/'+carcinoma+'/**/*.jpeg')
+image_list = glob('../../result/synth/'+carcinoma+'/**/*.jpeg')
 random.shuffle(image_list)
-xml_path = '../../result/synth_1/'+carcinoma+'/'
+xml_path = '../../result/synth/'+carcinoma+'/'
 category_list = [os.path.basename(os.path.dirname(f)) for f in image_list]
 
 
