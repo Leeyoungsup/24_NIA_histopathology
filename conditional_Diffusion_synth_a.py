@@ -24,7 +24,7 @@ from PIL import Image
 import torchvision
 import torch.nn as nn
 print(f"GPUs used:\t{torch.cuda.device_count()}")
-device = torch.device("cuda", 0)
+device = torch.device("cuda", 5)
 print(f"Device:\t\t{device}")
 
 
@@ -237,7 +237,7 @@ topilimage = torchvision.transforms.ToPILImage()
 diffusion.model.eval()
 cemblayer.eval()
 
-count = {key: 401360 for key in class_list}
+count = {key: 509090 for key in class_list}
 while (True):
 
     # generating samples
@@ -247,7 +247,7 @@ while (True):
     each_device_batch = len(class_list)*5
     with torch.no_grad():
         # lab = torch.ones(len(class_list), each_device_batch // len(class_list)).type(torch.long)* torch.arange(start=0, end=len(class_list)).reshape(-1, 1)
-        lab = torch.ones(len(class_list), each_device_batch // len(class_list)).type(torch.long)
+        lab = torch.zeros(len(class_list), each_device_batch // len(class_list)).type(torch.long)
         # lab = torch.tensor([[0, 0, 1, 3], [0, 0,1, 3]], dtype=torch.long)
         lab = lab.reshape(-1, 1).squeeze()
         lab = lab.to(device)
