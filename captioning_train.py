@@ -34,7 +34,7 @@ params={'image_size':1024,
         'beta1':0.5,
         'beta2':0.999,
         'batch_size':8,
-        'epochs':100,
+        'epochs':20,
         'data_path':'../../data/synth/010.위암 병리 이미지 및 판독문 합성 데이터/1.데이터/',
         'train_json':'../../data/synth/010.위암 병리 이미지 및 판독문 합성 데이터/1.데이터/1.Training/2.라벨링데이터/**/*.json',
         'val_json':'../../data/synth/010.위암 병리 이미지 및 판독문 합성 데이터/1.데이터/2.Validation/2.라벨링데이터/**/*.json',
@@ -354,8 +354,8 @@ for i in tqdm(range(len(val_image_list))):
     with open(val_json_list[i], 'r', encoding='utf-8-sig') as file:
         data = json.load(file)
     val_caption_list.append(str(data['content']['file']['patch_discription']))
-train_dataset=CustomDataset(train_list,params['data_path'],params['image_size'],val_caption_list,'train',vocab,transform=transform)
-val_dataset=CustomDataset(val_list,params['data_path'],params['image_size'],train_caption_list,'val',vocab,transform=transform)
+train_dataset=CustomDataset(train_list,params['data_path'],params['image_size'],train_caption_list,'train',vocab,transform=transform)
+val_dataset=CustomDataset(val_list,params['data_path'],params['image_size'],val_caption_list,'val',vocab,transform=transform)
 train_dataloader=DataLoader(train_dataset,batch_size=params['batch_size'],shuffle=True,collate_fn=collate_fn)
 val_dataloader=DataLoader(val_dataset,batch_size=params['batch_size'],shuffle=True,collate_fn=collate_fn)
 
