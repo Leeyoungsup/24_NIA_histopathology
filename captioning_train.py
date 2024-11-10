@@ -22,6 +22,7 @@ from torchinfo import summary
 from glob import glob
 from torchvision.transforms import ToTensor
 import time
+import json
 nltk.download('punkt')
 tf = ToTensor()
 # Device configurationresul
@@ -33,18 +34,19 @@ params={'image_size':1024,
         'beta1':0.5,
         'beta2':0.999,
         'batch_size':8,
-        'epochs':10000,
+        'epochs':100,
         'data_path':'../../data/synth/010.위암 병리 이미지 및 판독문 합성 데이터/1.데이터/',
-        'train_csv':'BR_train.csv',
-        'val_csv':'BR_val.csv',
+        'train_json':'../../data/synth/010.위암 병리 이미지 및 판독문 합성 데이터/1.데이터/1.Training/2.라벨링데이터/**/*.json',
+        'val_json':'../../data/synth/010.위암 병리 이미지 및 판독문 합성 데이터/1.데이터/2.Validation/2.라벨링데이터/**/*.json',
         'vocab_path':'../../data/synth/010.위암 병리 이미지 및 판독문 합성 데이터/1.데이터/vocab.pkl',
         'embed_size':300,
         'hidden_size':256,
         'num_layers':4,}
 
+
 class CustomDataset(Dataset):
     """COCO Custom Dataset compatible with torch.utils.data.DataLoader."""
-    def __init__(self,data_list, data_path,image_size, csv, class_dataset, vocab, transform=None):
+    def __init__(self,data_list, data_path,image_size, caption_list, class_dataset, vocab, transform=None):
         """Set the path for images, captions and vocabulary wrapper.
         
         Args:
@@ -53,8 +55,7 @@ class CustomDataset(Dataset):
             vocab: vocabulary wrapper.
             transform: image transformer.
         """
-        self.root = data_path+'**/**/'
-        self.df = pd.read_csv(data_path+csv)
+        self.caption_list= caption_list
         self.class_dataset=class_dataset
         self.vocab = vocab
         self.transform = transform
@@ -74,14 +75,11 @@ class CustomDataset(Dataset):
     
     def __getitem__(self, index):
         """Returns one data pair (image and caption)."""
-        df = self.df
+        caption = self.caption_list[index]
         vocab = self.vocab
-        img_id=df.loc[index]
-        
-        caption=img_id['caption']
         images = self.trans(self.data_list[index])
         # Convert caption (string) to word ids.
-        
+
         tokens = nltk.tokenize.word_tokenize(str(caption).lower())
         caption = []
         caption.append(vocab('<start>'))
@@ -163,6 +161,7 @@ def word2sentence(words_list):
         else:
             sentence+=word
     return sentence
+
 
 
 class FeatureExtractor(nn.Module):
@@ -333,21 +332,32 @@ transform = transforms.Compose([
         transforms.Normalize((0.485, 0.456, 0.406), 
                              (0.229, 0.224, 0.225))])
 
-df=pd.read_csv(params['data_path']+params['train_csv'])
-train_list=torch.zeros(len(df),3,params['image_size'],params['image_size'])
-for i in tqdm(range(len(df))):
-    image=transform(Image.open(glob(params['data_path']+'**/**/'+df.loc[i]['path'])[0]).resize((params['image_size'],params['image_size'])))
+train_json_list=glob(params['train_json'])
+train_image_list=[f.replace('2.라벨링데이터', '1.원천데이터') for f in train_json_list]
+train_image_list=[f.replace('.json', '.png') for f in train_image_list]
+train_caption_list=[]
+train_list=torch.zeros(len(train_json_list),3,params['image_size'],params['image_size'])
+for i in tqdm(range(len(train_image_list))):
+    image=transform(Image.open(train_image_list[i]).resize((params['image_size'],params['image_size'])))
     train_list[i]=image
-df=pd.read_csv(params['data_path']+params['val_csv'])
-test_list=torch.zeros(len(df),3,params['image_size'],params['image_size'])
-for i in tqdm(range(len(df))):
-    image=transform(Image.open(glob(params['data_path']+'**/**/'+df.loc[i]['path'])[0]).resize((params['image_size'],params['image_size'])))
-    test_list[i]=image
-train_dataset=CustomDataset(train_list,params['data_path'],params['image_size'],params['train_csv'],'train',vocab,transform=transform)
-test_dataset=CustomDataset(test_list,params['data_path'],params['image_size'],params['val_csv'],'val',vocab,transform=transform)
+    with open(train_json_list[i], 'r', encoding='utf-8-sig') as file:
+        data = json.load(file)
+    train_caption_list.append(str(data['content']['file']['patch_discription']))
+val_json_list=glob(params['val_json'])
+val_image_list=[f.replace('2.라벨링데이터', '1.원천데이터') for f in val_json_list]
+val_image_list=[f.replace('.json', '.png') for f in val_image_list]
+val_caption_list=[]
+val_list=torch.zeros(len(val_json_list),3,params['image_size'],params['image_size'])
+for i in tqdm(range(len(val_image_list))):
+    image=transform(Image.open(val_image_list[i]).resize((params['image_size'],params['image_size'])))
+    val_list[i]=image
+    with open(val_json_list[i], 'r', encoding='utf-8-sig') as file:
+        data = json.load(file)
+    val_caption_list.append(str(data['content']['file']['patch_discription']))
+train_dataset=CustomDataset(train_list,params['data_path'],params['image_size'],val_caption_list,'train',vocab,transform=transform)
+val_dataset=CustomDataset(val_list,params['data_path'],params['image_size'],train_caption_list,'val',vocab,transform=transform)
 train_dataloader=DataLoader(train_dataset,batch_size=params['batch_size'],shuffle=True,collate_fn=collate_fn)
-val_dataloader=DataLoader(test_dataset,batch_size=params['batch_size'],shuffle=True,collate_fn=collate_fn)
-
+val_dataloader=DataLoader(val_dataset,batch_size=params['batch_size'],shuffle=True,collate_fn=collate_fn)
 
 Feature_Extractor=FeatureExtractor()
 encoder = AttentionMILModel(params['embed_size'], 1280, Feature_Extractor).to(device)
@@ -357,7 +367,6 @@ criterion = nn.CrossEntropyLoss()
 model_param = list(decoder.parameters()) + list(encoder.parameters())
 optimizer = torch.optim.Adam(model_param, lr=params['lr'], betas=(params['beta1'], params['beta2']))
 # summary(encoder, input_size=(params['batch_size'], 3, params['image_size'], params['image_size']))
-
 
 plt_count=0
 sum_loss= 0
