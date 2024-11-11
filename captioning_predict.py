@@ -1,4 +1,4 @@
-import argparse
+
 import torch
 import torch.nn as nn
 import numpy as np
@@ -9,17 +9,13 @@ import pandas as pd
 from torch.nn.utils.rnn import pack_padded_sequence
 from torchvision import transforms
 from torch.utils.data import DataLoader,Dataset
-import csv
-import torchvision.models as models
-import torch.nn.functional as F
 from PIL import Image
 from tqdm import tqdm
-import matplotlib.pyplot as plt
 from nltk.translate.bleu_score import sentence_bleu
 import timm
-import random
-from torchinfo import summary
 from glob import glob
+from rouge_score import rouge_scorer
+import random
 from torchvision.transforms import ToTensor
 import time
 import json
@@ -35,13 +31,14 @@ params={'image_size':1024,
         'beta2':0.999,
         'batch_size':8,
         'epochs':50,
-        'data_path':'../../data/synth/011.유방암 병리 이미지 및 판독문 합성 데이터/1.데이터/',
-        'train_json':'../../data/synth/011.유방암 병리 이미지 및 판독문 합성 데이터/1.데이터/1.Training/2.라벨링데이터/**/*.json',
-        'val_json':'../../data/synth/011.유방암 병리 이미지 및 판독문 합성 데이터/1.데이터/2.Validation/2.라벨링데이터/**/*.json',
-        'vocab_path':'../../data/synth/011.유방암 병리 이미지 및 판독문 합성 데이터/1.데이터/vocab.pkl',
+        'data_path':'../../data/synth/010.위암 병리 이미지 및 판독문 합성 데이터/1.데이터/',
+        'test_json':'../../data/synth/010.위암 병리 이미지 및 판독문 합성 데이터/1.데이터/3.Test/2.라벨링데이터/**/*.json',
+        'vocab_path':'../../data/synth/010.위암 병리 이미지 및 판독문 합성 데이터/1.데이터/vocab.pkl',
         'embed_size':300,
         'hidden_size':256,
         'num_layers':4,}
+
+from os import path
 
 
 class CustomDataset(Dataset):
@@ -55,6 +52,7 @@ class CustomDataset(Dataset):
             vocab: vocabulary wrapper.
             transform: image transformer.
         """
+        self.data_path=data_path
         self.caption_list= caption_list
         self.class_dataset=class_dataset
         self.vocab = vocab
@@ -79,14 +77,14 @@ class CustomDataset(Dataset):
         vocab = self.vocab
         images = self.trans(self.data_list[index])
         # Convert caption (string) to word ids.
-
+        path=self.data_path[index]
         tokens = nltk.tokenize.word_tokenize(str(caption).lower())
         caption = []
         caption.append(vocab('<start>'))
         caption.extend([vocab(token) for token in tokens])
         caption.append(vocab('<end>'))
         target = torch.Tensor(caption)
-        return images, target
+        return images, target,path
 
     def __len__(self):
         return len(self.data_list)
@@ -131,7 +129,7 @@ def collate_fn(data):
     """
     # Sort a data list by caption length (descending order).
     data.sort(key=lambda x: len(x[1]), reverse=True)
-    images, captions = zip(*data)
+    images, captions,path = zip(*data)
 
     # Merge images (from tuple of 3D tensor to 4D tensor).
     images = torch.stack(images, 0)
@@ -142,7 +140,7 @@ def collate_fn(data):
     for i, cap in enumerate(captions):
         end = lengths[i]
         targets[i, :end] = cap[:end]        
-    return images, targets, lengths
+    return images, targets,path, lengths
 
 def idx2word(vocab, indices):
     sentence = []
@@ -161,7 +159,6 @@ def word2sentence(words_list):
         else:
             sentence+=word
     return sentence
-
 
 
 class FeatureExtractor(nn.Module):
@@ -323,6 +320,21 @@ def bleu_n(pred_words_list,label_words_list):
     bleu4=sentence_bleu([label_words_list], pred_words_list, weights=(0, 0, 0, 1))
     return bleu1,bleu2,bleu3,bleu4
 
+def rouge_scores(pred_sentence, label_sentence):
+    # Initialize the ROUGE scorer
+    scorer = rouge_scorer.RougeScorer(['rouge1', 'rouge2', 'rougeL'], use_stemmer=True)
+    
+    # Calculate the scores
+    scores = scorer.score(label_sentence, pred_sentence)
+    
+    # Extract the precision, recall, and f1 scores for each ROUGE metric
+    rouge1 = scores['rouge1']
+    rouge2 = scores['rouge2']
+    rougeL = scores['rougeL']
+    
+    # Return the ROUGE scores
+    return rouge1, rouge2, rougeL
+
 with open(params['vocab_path'], 'rb') as f:
         vocab = pickle.load(f)
 transform = transforms.Compose([ 
@@ -332,32 +344,20 @@ transform = transforms.Compose([
         transforms.Normalize((0.485, 0.456, 0.406), 
                              (0.229, 0.224, 0.225))])
 
-train_json_list=glob(params['train_json'])
-train_image_list=[f.replace('2.라벨링데이터', '1.원천데이터') for f in train_json_list]
-train_image_list=[f.replace('.json', '.png') for f in train_image_list]
-train_caption_list=[]
-train_list=torch.zeros(len(train_json_list),3,params['image_size'],params['image_size'])
-for i in tqdm(range(len(train_image_list))):
-    image=transform(Image.open(train_image_list[i]).resize((params['image_size'],params['image_size'])))
-    train_list[i]=image
-    with open(train_json_list[i], 'r', encoding='utf-8-sig') as file:
+test_json_list=glob(params['test_json'])
+test_image_list=[f.replace('2.라벨링데이터', '1.원천데이터') for f in test_json_list]
+test_image_list=[f.replace('.json', '.png') for f in test_image_list]
+test_caption_list=[]
+test_list=torch.zeros(len(test_json_list),3,params['image_size'],params['image_size'])
+for i in tqdm(range(len(test_image_list))):
+    image=transform(Image.open(test_image_list[i]).resize((params['image_size'],params['image_size'])))
+    test_list[i]=image
+    with open(test_json_list[i], 'r', encoding='utf-8-sig') as file:
         data = json.load(file)
-    train_caption_list.append(str(data['content']['file']['patch_discription']))
-val_json_list=glob(params['val_json'])
-val_image_list=[f.replace('2.라벨링데이터', '1.원천데이터') for f in val_json_list]
-val_image_list=[f.replace('.json', '.png') for f in val_image_list]
-val_caption_list=[]
-val_list=torch.zeros(len(val_json_list),3,params['image_size'],params['image_size'])
-for i in tqdm(range(len(val_image_list))):
-    image=transform(Image.open(val_image_list[i]).resize((params['image_size'],params['image_size'])))
-    val_list[i]=image
-    with open(val_json_list[i], 'r', encoding='utf-8-sig') as file:
-        data = json.load(file)
-    val_caption_list.append(str(data['content']['file']['patch_discription']))
-train_dataset=CustomDataset(train_list,params['data_path'],params['image_size'],train_caption_list,'train',vocab,transform=transform)
-val_dataset=CustomDataset(val_list,params['data_path'],params['image_size'],val_caption_list,'val',vocab,transform=transform)
-train_dataloader=DataLoader(train_dataset,batch_size=params['batch_size'],shuffle=True,collate_fn=collate_fn)
-val_dataloader=DataLoader(val_dataset,batch_size=params['batch_size'],shuffle=True,collate_fn=collate_fn)
+    test_caption_list.append(str(data['content']['file']['patch_discription']))
+
+test_dataset=CustomDataset(test_list,test_image_list,params['image_size'],test_caption_list,'val',vocab,transform=transform)
+test_dataloader=DataLoader(test_dataset,batch_size=params['batch_size'],shuffle=True,collate_fn=collate_fn)
 
 Feature_Extractor=FeatureExtractor()
 encoder = AttentionMILModel(params['embed_size'], 1280, Feature_Extractor).to(device)
@@ -366,98 +366,59 @@ decoder = DecoderTransformer(params['embed_size'], len(vocab), 15, params['hidde
 criterion = nn.CrossEntropyLoss()
 model_param = list(decoder.parameters()) + list(encoder.parameters())
 optimizer = torch.optim.Adam(model_param, lr=params['lr'], betas=(params['beta1'], params['beta2']))
-# summary(encoder, input_size=(params['batch_size'], 3, params['image_size'], params['image_size']))
+encoder.load_state_dict(torch.load('../../model/captioning/BR_encoder_check.pth',map_location=device))
+decoder.load_state_dict(torch.load('../../model/captioning/BR_decoder_check.pth',map_location=device))
 
-plt_count=0
-sum_loss= 0
-scheduler = 0.90
-teacher_forcing=0.0
-import random  # random 모듈 임포트
 
-for epoch in range(params['epochs']):
-    train = tqdm(train_dataloader)
-    count = 0
-    train_loss = 0.0
-    
-    # 에폭마다 teacher_forcing_ratio 조정 (예: 점진적으로 감소)
-    teacher_forcing_ratio = max(0.5, 1.0 - (epoch * 0.05))
-    
-    for images, captions, lengths in train:
-        count += 1
+total_labels = []
+total_predictions = []
+total_bleu=[]
+total_Rogue=[]
+test_df=pd.DataFrame(columns=['Path','Predicted','label','BLEU1','BLEU2','BLEU3','BLEU4','Rouge1','Rouge2','RougeL'])
+with torch.no_grad():
+    test_count = 0
+    test_loss = 0.0 
+    test_bleu_score = 0.0
+    test_tq = tqdm(test_dataloader)
+    for images, captions,path, lengths in test_tq:
+        
         images = images.to(device)
         captions = captions.to(device)
-        
+
         # Encoder를 통해 특징 추출
         features = encoder(images)
+        # 캡션 생성 (교사 강요 없이)
+        sampled_ids = decoder.sample(features)
         
-        # 디코더에 입력 (teacher_forcing_ratio 적용)
-        outputs = decoder(features, captions, teacher_forcing_ratio=teacher_forcing_ratio)
-        
-        # 출력 및 타겟의 차원 맞추기
-        captions_target = captions[:, 1:]  # 첫 번째 토큰(<start>) 제외
-        outputs = outputs[:, 1:, :]  # 첫 번째 출력 제외
-        outputs = outputs.reshape(-1, outputs.size(2))  # (batch_size * seq_length, vocab_size)
-        targets = captions_target.reshape(-1)  # (batch_size * seq_length)
-        
-        # 손실 계산
-        loss = criterion(outputs, targets)
-        
-        # 역전파 및 옵티마이저 스텝
-        decoder.zero_grad()
-        encoder.zero_grad()
-        loss.backward()
-        optimizer.step()
-        
-        train_loss += loss.item()
-        train.set_description(f"train epoch: {epoch+1}/{params['epochs']} Step: {count} loss : {train_loss/count:.4f}")
+        # BLEU 점수 계산
+        for i in range(images.size(0)):
+            test_count += 1
+            predicted_caption = idx2word(vocab, sampled_ids[i])
+            target_caption = idx2word(vocab, captions[i])
+            
+            # 특수 토큰 제거
+            predicted_caption = [word for word in predicted_caption if word not in ['<start>', '<end>', '<pad>']]
+            target_caption = [word for word in target_caption if word not in ['<start>', '<end>', '<pad>']]
+            predicted_sentence=word2sentence(predicted_caption)
+            target_sentence=word2sentence(target_caption)
+            # BLEU-4 점수 계산
+            bleu_score = sentence_bleu([target_caption], predicted_caption, weights=(1, 0, 0, 0))
+            test_bleu_score += bleu_score
+            bleu_11=bleu_n(predicted_caption,target_caption)
+            total_bleu.append(bleu_11)
+            # ROUGE 점수 계산
+            rouge_score = rouge_scores(predicted_sentence, target_sentence)
+            total_Rogue.append(rouge_score)
+            # 예측과 정답 문장 저장
+            total_labels.append(target_sentence)
+            total_predictions.append(predicted_sentence)
 
-    with torch.no_grad():
-        val_count = 0
-        val_loss = 0.0 
-        val_bleu_score = 0.0
-        val = tqdm(val_dataloader)
-        for images, captions, lengths in val:
-            
-            images = images.to(device)
-            captions = captions.to(device)
-            
-            # Encoder를 통해 특징 추출
-            features = encoder(images)
-            
-            # 디코더에 입력 (손실 계산을 위해 교사 강요 적용)
-            outputs = decoder(features, captions, teacher_forcing_ratio=teacher_forcing_ratio)
-            
-            # 손실 계산을 위한 정렬
-            captions_target = captions[:, 1:]
-            outputs = outputs[:, 1:, :]
-            outputs = outputs.reshape(-1, outputs.size(2))
-            targets = captions_target.reshape(-1)
-            loss = criterion(outputs, targets)
-            val_loss += loss.item()
-            
-            # 캡션 생성 (교사 강요 없이)
-            sampled_ids = decoder.sample(features)
-            
-            # BLEU 점수 계산
-            for i in range(images.size(0)):
-                val_count += 1
-                predicted_caption = idx2word(vocab, sampled_ids[i])
-                target_caption = idx2word(vocab, captions[i])
-                
-                # 특수 토큰 제거
-                predicted_caption = [word for word in predicted_caption if word not in ['<start>', '<end>', '<pad>']]
-                target_caption = [word for word in target_caption if word not in ['<start>', '<end>', '<pad>']]
-                
-                # BLEU-4 점수 계산
-                bleu_score = sentence_bleu([target_caption], predicted_caption, weights=(1, 0, 0, 0))
-                val_bleu_score += bleu_score
-            
-            val.set_description(f"val epoch: {epoch+1}/{params['epochs']} Step: {val_count} loss : {val_loss/val_count:.4f} BLEU-1: {val_bleu_score/(val_count):.4f}")
-    if val_bleu_score/val_count>sum_loss:
-        sum_loss=val_bleu_score/val_count
-        torch.save(encoder.state_dict(), '../../model/captioning/BR_encoder_check.pth')
-        torch.save(decoder.state_dict(), '../../model/captioning/BR_decoder_check.pth')
+            test_df.loc[len(test_df)]={'Path':os.path.basename(path[i]),'Predicted':predicted_sentence,'label':target_sentence,'BLEU1':bleu_11[0],'BLEU2':bleu_11[1],'BLEU3':bleu_11[2],'BLEU4':bleu_11[3],'Rouge1':rouge_score[0],'Rouge2':rouge_score[1],'RougeL':rouge_score[2]}
+        test_tq.set_description(f"test BLEU-1: {test_bleu_score/(test_count):.4f}")
+test_df.to_csv('../../result/caption_result/BR_result.csv',index=False)
+
+print(f'Bleu-1:{np.array(total_bleu)[:,0].mean():.4f}+-{np.array(total_bleu)[:,0].std():.4f} \nBleu-2:{np.array(total_bleu)[:,1].mean():.4f}+-{np.array(total_bleu)[:,1].std():.4f} \nBleu-3:{np.array(total_bleu)[:,2].mean():.4f}+-{np.array(total_bleu)[:,2].std():.4f} \nBleu-4:{np.array(total_bleu)[:,3].mean():.4f}+-{np.array(total_bleu)[:,3].std():.4f} \nRogue-1:{np.array(total_Rogue)[:,0].mean():.4f}+-{np.array(total_Rogue)[:,0].std():.4f} \nRogue-2:{np.array(total_Rogue)[:,1].mean():.4f}+-{np.array(total_Rogue)[:,1].std():.4f} \nRogue-L:{np.array(total_Rogue)[:,2].mean():.4f}+-{np.array(total_Rogue)[:,2].std():.4f}')
 end_time = time.time()
-print("End Time:", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(end_time)))
+print("\nEnd Time:", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(end_time)))
 elapsed_time = end_time - start_time
 print(f"Elapsed Time: {elapsed_time:.2f} seconds")
