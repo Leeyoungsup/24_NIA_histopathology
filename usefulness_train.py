@@ -19,14 +19,14 @@ from torch.nn.modules.batchnorm import _BatchNorm
 import matplotlib.pyplot as plt
 import torch.nn.functional as F
 print(f"GPUs used:\t{torch.cuda.device_count()}")
-device = torch.device("cuda",1)
+device = torch.device("cuda",0)
 print(f"Device:\t\t{device}")
 class_list=['normal','abnormal']
-params={'image_size':1024,
+params={'image_size':256,
         'lr':2e-4,
         'beta1':0.5,
         'beta2':0.999,
-        'batch_size':4,
+        'batch_size':8,
         'epochs':50,
         'n_classes':2,
         'inch':3,
@@ -92,7 +92,7 @@ class FeatureExtractor(nn.Module):
     """Feature extoractor block"""
     def __init__(self):
         super(FeatureExtractor, self).__init__()
-        cnn1= timm.create_model('tf_efficientnetv2_xl', pretrained=True,drop_rate=0.2)
+        cnn1= timm.create_model('tf_efficientnetv2_s', pretrained=True)
         self.feature_ex = nn.Sequential(*list(cnn1.children())[:-1])
 
     def forward(self, inputs):
@@ -198,7 +198,7 @@ def enable_running_stats(model):
 import transformers
 
 Feature_Extractor=FeatureExtractor()
-model = custom_model(2,2048,Feature_Extractor)
+model = custom_model(2,1280,Feature_Extractor)
 model = model.to(device)
 # optimizer = SAM(model.parameters(), base_optimizer, lr=params['lr'], momentum=0.9)
 optimizer=torch.optim.Adam(model.parameters(), lr=params['lr'], betas=(params['beta1'], params['beta2']))
@@ -223,12 +223,13 @@ for epoch in range(params['epochs']):
         y = y.to(device).float()
         count+=1
         x=x.to(device).float()
-        optimizer.zero_grad()  # optimizer zero 로 초기화
+       
         predict = model(x).to(device)
         cost = F.cross_entropy(predict.softmax(dim=1), y) # cost 구함
         acc=accuracy(predict.softmax(dim=1).argmax(dim=1),y.argmax(dim=1))
         cost.backward() # cost에 대한 backward 구함
         optimizer.step()
+        optimizer.zero_grad()  # optimizer zero 로 초기화
         running_loss += cost.item()
         acc_loss+=acc
         train.set_description(f"epoch: {epoch+1}/{params['epochs']} Step: {count+1} loss : {running_loss/count:.4f} accuracy: {acc_loss/count:.4f}")

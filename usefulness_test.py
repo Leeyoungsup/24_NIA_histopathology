@@ -22,12 +22,12 @@ print(f"GPUs used:\t{torch.cuda.device_count()}")
 device = torch.device("cuda",1)
 print(f"Device:\t\t{device}")
 class_list=['normal','abnormal']
-params={'image_size':1024,
-        'lr':2e-5,
+params={'image_size':256,
+        'lr':2e-4,
         'beta1':0.5,
         'beta2':0.999,
         'batch_size':1,
-        'epochs':50,
+        'epochs':20,
         'n_classes':2,
         'inch':3,
         }
@@ -96,7 +96,7 @@ class FeatureExtractor(nn.Module):
     """Feature extoractor block"""
     def __init__(self):
         super(FeatureExtractor, self).__init__()
-        cnn1= timm.create_model('tf_efficientnetv2_xl', pretrained=True)
+        cnn1= timm.create_model('tf_efficientnetv2_s', pretrained=True)
         self.feature_ex = nn.Sequential(*list(cnn1.children())[:-1])
 
     def forward(self, inputs):
@@ -208,8 +208,8 @@ source_model = custom_model(2,1280,Feature_Extractor)
 source_model = source_model.to(device)
 base_optimizer = torch.optim.SGD
 # optimizer = SAM(model.parameters(), base_optimizer, lr=params['lr'], momentum=0.9)
-raw_model.load_state_dict(torch.load('../../model/usefulness/breast/raw_usefulness.pt',map_location=device))
-source_model.load_state_dict(torch.load('../../model/usefulness/breast/source_usefulness.pt',map_location=device))
+raw_model.load_state_dict(torch.load('../../model/usefulness/breast/raw_usefulness_check.pt',map_location=device))
+source_model.load_state_dict(torch.load('../../model/usefulness/breast/source_usefulness_check.pt',map_location=device))
 
 # Initialize F1 score metric for binary classification
 f1_metric = torchmetrics.F1Score(task="multiclass", num_classes=2).to(device)
