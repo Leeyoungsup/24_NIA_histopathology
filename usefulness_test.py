@@ -23,10 +23,10 @@ device = torch.device("cuda",1)
 print(f"Device:\t\t{device}")
 class_list=['normal','abnormal']
 params={'image_size':1024,
-        'lr':2e-4,
+        'lr':2e-5,
         'beta1':0.5,
         'beta2':0.999,
-        'batch_size':4,
+        'batch_size':1,
         'epochs':50,
         'n_classes':2,
         'inch':3,
@@ -39,60 +39,64 @@ trans = transforms.Compose([
 
 def transback(data:Tensor) -> Tensor:
     return data / 2 + 0.5
-
 class CustomDataset(Dataset):
     """COCO Custom Dataset compatible with torch.utils.data.DataLoader."""
-    def __init__(self,parmas, images,label):
-        
+    def __init__(self, params, images, labels):
         self.images = images
-        self.args=parmas
-        self.label=label
+        self.args = params
+        self.labels = labels
         
-    def trans(self,image):
+    def trans(self, image):
         if random.random() > 0.5:
-            transform = transforms.RandomHorizontalFlip(1)
-            image = transform(image)
-            
+            image = transforms.functional.hflip(image)
         if random.random() > 0.5:
-            transform = transforms.RandomVerticalFlip(1)
-            image = transform(image)
-            
+            image = transforms.functional.vflip(image)
         return image
     
     def __getitem__(self, index):
-        image=self.images[index]
-        label=self.label[index]
+        image = self.images[index]
+        label = self.labels[index]
         image = self.trans(image)
-        return image,label
+        return image, label
     
     def __len__(self):
         return len(self.images)
 
+# DataLoader 딕셔너리를 생성하여 각 CSV 파일에 대한 DataLoader를 저장
+dataloaders = {}
+csv_folder = '../../data/usefulness/breast/'  # CSV 파일이 저장된 폴더 경로
+csv_files = [f for f in os.listdir(csv_folder) if f.startswith('test_') and f.endswith('.csv')]
 
-image_label=[]
-image_path=[]
-df=pd.read_csv('../../data/usefulness/breast/raw.csv')
+for csv_file in csv_files:
+    csv_path = os.path.join(csv_folder, csv_file)
+    df = pd.read_csv(csv_path)
+    
+    # 이미지 경로와 레이블을 리스트로 추출
+    image_paths = df['image'].tolist()
+    image_labels = df['label'].tolist()
+    
+    # 이미지 데이터를 텐서로 변환
+    test_images = torch.zeros((len(image_paths), params['inch'], params['image_size'], params['image_size']))
+    for i in tqdm(range(len(image_paths)), desc=f"Processing {csv_file}"):
+        test_images[i] = trans(Image.open(image_paths[i]).convert('RGB').resize((params['image_size'], params['image_size'])))
+    
+    # 레이블을 one-hot 인코딩하여 텐서로 변환
+    test_labels = torch.tensor(image_labels)
+    test_labels = torch.nn.functional.one_hot(test_labels).to(torch.int64)
+    
+    # CustomDataset 및 DataLoader 생성
+    test_dataset = CustomDataset(params, test_images, test_labels)
+    dataloaders[csv_file] = DataLoader(test_dataset, batch_size=params['batch_size'], shuffle=True)
 
-for i in range(len(df)):
-
-    image_path.append(df['image'][i])
-    image_label.append(df['label'][i].item())
-        
-train_images=torch.zeros((len(image_path),params['inch'],params['image_size'],params['image_size']))
-for i in tqdm(range(len(image_path))):
-    train_images[i]=trans(Image.open(image_path[i]).convert('RGB').resize((params['image_size'],params['image_size'])))
-X_train, X_test, y_train, y_test = train_test_split(train_images, image_label, test_size=0.2, random_state=42)
-train_dataset=CustomDataset(params,X_train,F.one_hot(torch.tensor(y_train)).to(torch.int64))
-val_dataset=CustomDataset(params,X_test,F.one_hot(torch.tensor(y_test)).to(torch.int64))
-dataloader=DataLoader(train_dataset,batch_size=params['batch_size'],shuffle=True)
-val_dataloader=DataLoader(val_dataset,batch_size=params['batch_size'],shuffle=True)
+# 각 DataLoader는 dataloaders 딕셔너리에서 접근 가능
+# 예를 들어, test_0.csv에 대한 DataLoader는 dataloaders['test_0.csv']로 접근 가능
 
 
 class FeatureExtractor(nn.Module):
     """Feature extoractor block"""
     def __init__(self):
         super(FeatureExtractor, self).__init__()
-        cnn1= timm.create_model('tf_efficientnetv2_xl', pretrained=True,drop_rate=0.2)
+        cnn1= timm.create_model('tf_efficientnetv2_xl', pretrained=True)
         self.feature_ex = nn.Sequential(*list(cnn1.children())[:-1])
 
     def forward(self, inputs):
@@ -198,63 +202,63 @@ def enable_running_stats(model):
 import transformers
 
 Feature_Extractor=FeatureExtractor()
-model = custom_model(2,2048,Feature_Extractor)
-model = model.to(device)
+raw_model = custom_model(2,1280,Feature_Extractor)
+raw_model = raw_model.to(device)
+source_model = custom_model(2,1280,Feature_Extractor)
+source_model = source_model.to(device)
+base_optimizer = torch.optim.SGD
 # optimizer = SAM(model.parameters(), base_optimizer, lr=params['lr'], momentum=0.9)
-optimizer=torch.optim.Adam(model.parameters(), lr=params['lr'], betas=(params['beta1'], params['beta2']))
-accuracy = torchmetrics.Accuracy(task="multiclass", num_classes=2).to(device)
+raw_model.load_state_dict(torch.load('../../model/usefulness/breast/raw_usefulness.pt',map_location=device))
+source_model.load_state_dict(torch.load('../../model/usefulness/breast/source_usefulness.pt',map_location=device))
 
-MIN_loss=5000
-train_loss_list=[]
-val_loss_list=[]
-train_acc_list=[]
-sig=nn.Sigmoid()
-val_acc_list=[]
+# Initialize F1 score metric for binary classification
+f1_metric = torchmetrics.F1Score(task="multiclass", num_classes=2).to(device)
 
-
-for epoch in range(params['epochs']):
-    train=tqdm(dataloader)
-    count=0
-    running_loss = 0.0
-    acc_loss=0
-    model.train()
-    for x, y in train:
-        
-        y = y.to(device).float()
-        count+=1
-        x=x.to(device).float()
-        optimizer.zero_grad()  # optimizer zero 로 초기화
-        predict = model(x).to(device)
-        cost = F.cross_entropy(predict.softmax(dim=1), y) # cost 구함
-        acc=accuracy(predict.softmax(dim=1).argmax(dim=1),y.argmax(dim=1))
-        cost.backward() # cost에 대한 backward 구함
-        optimizer.step()
-        running_loss += cost.item()
-        acc_loss+=acc
-        train.set_description(f"epoch: {epoch+1}/{params['epochs']} Step: {count+1} loss : {running_loss/count:.4f} accuracy: {acc_loss/count:.4f}")
-    train_loss_list.append((running_loss/count))
-    train_acc_list.append((acc_loss/count).cpu().detach().numpy())
-#validation
-    val=tqdm(val_dataloader)
+# Function to evaluate a model on a given DataLoader
+# Function to evaluate a model on a given DataLoader
+def evaluate_model_manual_f1(model, dataloader,csv_file):
     model.eval()
-    count=0
-    val_running_loss=0.0
-    acc_loss=0
+    
+    # Initialize counts
+    tp, tn, fp, fn = 0, 0, 0, 0
+    
     with torch.no_grad():
-        for x, y in val:
-            y = y.to(device).float()
-            count+=1
-            x=x.to(device).float()
-            predict = model(x).to(device)
-            cost = F.cross_entropy(predict.softmax(dim=1), y) # cost 구함
-            acc=accuracy(predict.softmax(dim=1).argmax(dim=1),y.argmax(dim=1))
-            val_running_loss+=cost.item()
-            acc_loss+=acc
-            val.set_description(f"Validation epoch: {epoch+1}/{params['epochs']} Step: {count+1} loss : {val_running_loss/count:.4f}  accuracy: {acc_loss/count:.4f}")
-        val_loss_list.append((val_running_loss/count))
-        val_acc_list.append((acc_loss/count).cpu().detach().numpy())
-        
-    if MIN_loss>(val_running_loss/count):
-        torch.save(model.state_dict(), '../../model/usefulness/breast/raw_usefulness_check.pt')
-        MIN_loss=(val_running_loss/count)
-torch.save(model.state_dict(), '../../model/usefulness/breast/raw_usefulness.pt')
+        for images, labels in tqdm(dataloader, desc=csv_file):
+            images = images.to(device)
+            labels = labels.argmax(dim=1).to(device)  # Convert one-hot encoded labels to class indices
+            logits = model(images)
+            preds = torch.argmax(logits, dim=1)  # Get predicted class indices
+            
+            # Calculate TP, TN, FP, FN
+            tp += ((preds == 1) & (labels == 1)).sum().item()
+            tn += ((preds == 0) & (labels == 0)).sum().item()
+            fp += ((preds == 1) & (labels == 0)).sum().item()
+            fn += ((preds == 0) & (labels == 1)).sum().item()
+    
+    # Calculate precision, recall, and F1 score
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+    f1_score = (2 * precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+    
+    return f1_score
+# Load each test set and evaluate with both models
+# Dictionary to store F1 scores for each model on each test set
+f1_scores = {'raw_model': {}, 'source_model': {}}
+
+# Evaluate both raw_model and source_model on each test set DataLoader
+for csv_file, dataloader in dataloaders.items():
+    # Evaluate raw_model
+    f1_raw = evaluate_model_manual_f1(raw_model, dataloader,'raw '+csv_file)
+    f1_scores['raw_model'][csv_file] = f1_raw
+    
+    # Evaluate source_model
+    f1_source = evaluate_model_manual_f1(source_model, dataloader,'source '+csv_file)
+    f1_scores['source_model'][csv_file] = f1_source
+
+# Convert the dictionary to a DataFrame for easier CSV export
+f1_scores_df = pd.DataFrame(f1_scores)
+
+# Save to CSV
+f1_scores_df.to_csv("../../result/usefulness/breast/f1_scores.csv", index_label="Test Set")
+
+print("F1 scores saved to f1_scores.csv")
