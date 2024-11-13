@@ -11,7 +11,7 @@ from torchvision import transforms
 from torch.utils.data import DataLoader,Dataset
 from PIL import Image
 from tqdm import tqdm
-from nltk.translate.bleu_score import sentence_bleu
+from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 import timm
 from glob import glob
 from rouge_score import rouge_scorer
@@ -19,8 +19,10 @@ import random
 from torchvision.transforms import ToTensor
 import time
 import json
+import warnings
 nltk.download('punkt')
 tf = ToTensor()
+warnings.filterwarnings("ignore", category=UserWarning)
 # Device configurationresul
 device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
 start_time = time.time()
@@ -32,7 +34,7 @@ params={'image_size':1024,
         'batch_size':8,
         'epochs':50,
         'data_path':'../../data/synth/010.위암 병리 이미지 및 판독문 합성 데이터/1.데이터/',
-        'test_json':'../../data/synth/010.위암 병리 이미지 및 판독문 합성 데이터/1.데이터/3.Test/2.라벨링데이터/**/*.json',
+        'test_json':'../../data/synth/010.위암 병리 이미지 및 판독문 합성 데이터/1.데이터/3.Test/2.라벨링데이터/',
         'vocab_path':'../../data/synth/010.위암 병리 이미지 및 판독문 합성 데이터/1.데이터/vocab.pkl',
         'embed_size':300,
         'hidden_size':256,
@@ -60,22 +62,12 @@ class CustomDataset(Dataset):
         self.image_size=image_size
         self.data_list=data_list
         
-    def trans(self,image):
-        if random.random() > 0.5:
-            transform = transforms.RandomHorizontalFlip(1)
-            image = transform(image)
-            
-        if random.random() > 0.5:
-            transform = transforms.RandomVerticalFlip(1)
-            image = transform(image)
-            
-        return image
     
     def __getitem__(self, index):
         """Returns one data pair (image and caption)."""
         caption = self.caption_list[index]
         vocab = self.vocab
-        images = self.trans(self.data_list[index])
+        images = self.data_list[index]
         # Convert caption (string) to word ids.
         path=self.data_path[index]
         tokens = nltk.tokenize.word_tokenize(str(caption).lower())
@@ -305,20 +297,23 @@ class DecoderTransformer(nn.Module):
         
         sampled_ids = torch.stack(sampled_ids, 1)
         return sampled_ids
-def bleu_n(pred_words_list,label_words_list):
-
-    bleu1 = sentence_bleu([label_words_list], pred_words_list, weights=(1, 0, 0, 0))
-
-
-# BLEU@2 calculation
-    bleu2 = sentence_bleu([label_words_list], pred_words_list, weights=(0, 1, 0, 0))
-
-
-    bleu3=sentence_bleu([label_words_list], pred_words_list, weights=(0, 0, 1, 0))
-
-
-    bleu4=sentence_bleu([label_words_list], pred_words_list, weights=(0, 0, 0, 1))
-    return bleu1,bleu2,bleu3,bleu4
+def bleu_n(pred_words_list, label_words_list):
+    # Define a smoothing function to avoid warnings
+    smoothing = SmoothingFunction().method1
+    
+    # BLEU@1 calculation
+    bleu1 = sentence_bleu([label_words_list], pred_words_list, weights=(1, 0, 0, 0), smoothing_function=smoothing)
+    
+    # BLEU@2 calculation
+    bleu2 = sentence_bleu([label_words_list], pred_words_list, weights=(0, 1, 0, 0), smoothing_function=smoothing)
+    
+    # BLEU@3 calculation
+    bleu3 = sentence_bleu([label_words_list], pred_words_list, weights=(0, 0, 1, 0), smoothing_function=smoothing)
+    
+    # BLEU@4 calculation
+    bleu4 = sentence_bleu([label_words_list], pred_words_list, weights=(0, 0, 0, 1), smoothing_function=smoothing)
+    
+    return bleu1, bleu2, bleu3, bleu4
 
 def rouge_scores(pred_sentence, label_sentence):
     # Initialize the ROUGE scorer
@@ -338,13 +333,15 @@ def rouge_scores(pred_sentence, label_sentence):
 with open(params['vocab_path'], 'rb') as f:
         vocab = pickle.load(f)
 transform = transforms.Compose([ 
-        transforms.RandomCrop(params['image_size']),
-        transforms.RandomHorizontalFlip(), 
         transforms.ToTensor(), 
         transforms.Normalize((0.485, 0.456, 0.406), 
                              (0.229, 0.224, 0.225))])
 
-test_json_list=glob(params['test_json'])
+test_df=pd.read_csv(params['data_path']+'dataset.csv')
+test_json_list=[]
+for i in range(len(test_df)):
+    test_json_list.append(glob(params['test_json']+'**/'+test_df['Path'][i].replace('.png','.json'))[0])
+# test_json_list=glob('../../data/synth/010.위암 병리 이미지 및 판독문 합성 데이터/1.데이터/3.Test/2.라벨링데이터/**/*.json')
 test_image_list=[f.replace('2.라벨링데이터', '1.원천데이터') for f in test_json_list]
 test_image_list=[f.replace('.json', '.png') for f in test_image_list]
 test_caption_list=[]
@@ -357,7 +354,7 @@ for i in tqdm(range(len(test_image_list))):
     test_caption_list.append(str(data['content']['file']['patch_discription']))
 
 test_dataset=CustomDataset(test_list,test_image_list,params['image_size'],test_caption_list,'val',vocab,transform=transform)
-test_dataloader=DataLoader(test_dataset,batch_size=params['batch_size'],shuffle=True,collate_fn=collate_fn)
+test_dataloader=DataLoader(test_dataset,batch_size=params['batch_size'],shuffle=False,collate_fn=collate_fn,drop_last=False)
 
 Feature_Extractor=FeatureExtractor()
 encoder = AttentionMILModel(params['embed_size'], 1280, Feature_Extractor).to(device)
@@ -366,8 +363,8 @@ decoder = DecoderTransformer(params['embed_size'], len(vocab), 15, params['hidde
 criterion = nn.CrossEntropyLoss()
 model_param = list(decoder.parameters()) + list(encoder.parameters())
 optimizer = torch.optim.Adam(model_param, lr=params['lr'], betas=(params['beta1'], params['beta2']))
-encoder.load_state_dict(torch.load('../../model/captioning/BR_encoder_check.pth',map_location=device))
-decoder.load_state_dict(torch.load('../../model/captioning/BR_decoder_check.pth',map_location=device))
+encoder.load_state_dict(torch.load('../../model/captioning/ST_encoder_check.pth',map_location=device))
+decoder.load_state_dict(torch.load('../../model/captioning/ST_decoder_check.pth',map_location=device))
 
 
 total_labels = []
@@ -415,7 +412,7 @@ with torch.no_grad():
 
             test_df.loc[len(test_df)]={'Path':os.path.basename(path[i]),'Predicted':predicted_sentence,'label':target_sentence,'BLEU1':bleu_11[0],'BLEU2':bleu_11[1],'BLEU3':bleu_11[2],'BLEU4':bleu_11[3],'Rouge1':rouge_score[0],'Rouge2':rouge_score[1],'RougeL':rouge_score[2]}
         test_tq.set_description(f"test BLEU-1: {test_bleu_score/(test_count):.4f}")
-test_df.to_csv('../../result/caption_result/BR_result.csv',index=False)
+test_df.to_csv('../../result/caption_result/ST_result.csv',index=False)
 
 print(f'Bleu-1:{np.array(total_bleu)[:,0].mean():.4f}+-{np.array(total_bleu)[:,0].std():.4f} \nBleu-2:{np.array(total_bleu)[:,1].mean():.4f}+-{np.array(total_bleu)[:,1].std():.4f} \nBleu-3:{np.array(total_bleu)[:,2].mean():.4f}+-{np.array(total_bleu)[:,2].std():.4f} \nBleu-4:{np.array(total_bleu)[:,3].mean():.4f}+-{np.array(total_bleu)[:,3].std():.4f} \nRogue-1:{np.array(total_Rogue)[:,0].mean():.4f}+-{np.array(total_Rogue)[:,0].std():.4f} \nRogue-2:{np.array(total_Rogue)[:,1].mean():.4f}+-{np.array(total_Rogue)[:,1].std():.4f} \nRogue-L:{np.array(total_Rogue)[:,2].mean():.4f}+-{np.array(total_Rogue)[:,2].std():.4f}')
 end_time = time.time()
