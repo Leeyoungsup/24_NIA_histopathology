@@ -35,10 +35,10 @@ params={'image_size':1024,
         'beta2':0.999,
         'batch_size':8,
         'epochs':50,
-        'data_path':'../../data/synth/010.위암 병리 이미지 및 판독문 합성 데이터/1.데이터/',
-        'train_json':'../../data/synth/010.위암 병리 이미지 및 판독문 합성 데이터/1.데이터/1.Training/2.라벨링데이터/**/*.json',
-        'val_json':'../../data/synth/010.위암 병리 이미지 및 판독문 합성 데이터/1.데이터/2.Validation/2.라벨링데이터/**/*.json',
-        'vocab_path':'../../data/synth/010.위암 병리 이미지 및 판독문 합성 데이터/1.데이터/vocab.pkl',
+        'data_path':'../../data/synth/011.유방암 병리 이미지 및 판독문 합성 데이터/1.데이터/',
+        'train_json':'../../data/synth/011.유방암 병리 이미지 및 판독문 합성 데이터/1.데이터/1.Training/2.라벨링데이터/**/*.json',
+        'val_json':'../../data/synth/011.유방암 병리 이미지 및 판독문 합성 데이터/1.데이터/2.Validation/2.라벨링데이터/**/*.json',
+        'vocab_path':'../../data/synth/011.유방암 병리 이미지 및 판독문 합성 데이터/1.데이터/vocab.pkl',
         'embed_size':300,
         'hidden_size':256,
         'num_layers':4,}
@@ -455,8 +455,8 @@ for epoch in range(params['epochs']):
             val.set_description(f"val epoch: {epoch+1}/{params['epochs']} Step: {val_count} loss : {val_loss/val_count:.4f} BLEU-1: {val_bleu_score/(val_count):.4f}")
     if val_bleu_score/val_count>sum_loss:
         sum_loss=val_bleu_score/val_count
-        torch.save(encoder.state_dict(), '../../model/captioning/ST_encoder_check.pth')
-        torch.save(decoder.state_dict(), '../../model/captioning/ST_decoder_check.pth')
+        torch.save(encoder.state_dict(), '../../model/captioning/BR_encoder_check.pth')
+        torch.save(decoder.state_dict(), '../../model/captioning/BR_decoder_check.pth')
 end_time = time.time()
 print("End Time:", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(end_time)))
 elapsed_time = end_time - start_time

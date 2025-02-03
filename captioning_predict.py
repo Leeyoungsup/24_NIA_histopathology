@@ -33,9 +33,9 @@ params={'image_size':1024,
         'beta2':0.999,
         'batch_size':8,
         'epochs':50,
-        'data_path':'../../data/synth/010.위암 병리 이미지 및 판독문 합성 데이터/1.데이터/',
-        'test_json':'../../data/synth/010.위암 병리 이미지 및 판독문 합성 데이터/1.데이터/3.Test/2.라벨링데이터/',
-        'vocab_path':'../../data/synth/010.위암 병리 이미지 및 판독문 합성 데이터/1.데이터/vocab.pkl',
+        'data_path':'../../data/synth/011.유방암 병리 이미지 및 판독문 합성 데이터/1.데이터/',
+        'test_json':'../../data/synth/011.유방암 병리 이미지 및 판독문 합성 데이터/1.데이터/3.Test/2.라벨링데이터/',
+        'vocab_path':'../../data/synth/011.유방암 병리 이미지 및 판독문 합성 데이터/vocab.pkl',
         'embed_size':300,
         'hidden_size':256,
         'num_layers':4,}
@@ -305,13 +305,13 @@ def bleu_n(pred_words_list, label_words_list):
     bleu1 = sentence_bleu([label_words_list], pred_words_list, weights=(1, 0, 0, 0), smoothing_function=smoothing)
     
     # BLEU@2 calculation
-    bleu2 = sentence_bleu([label_words_list], pred_words_list, weights=(0, 1, 0, 0), smoothing_function=smoothing)
+    bleu2 = sentence_bleu([label_words_list], pred_words_list, weights=(0.5, 0.5, 0, 0), smoothing_function=smoothing)
     
     # BLEU@3 calculation
-    bleu3 = sentence_bleu([label_words_list], pred_words_list, weights=(0, 0, 1, 0), smoothing_function=smoothing)
+    bleu3 = sentence_bleu([label_words_list], pred_words_list, weights=(0.33, 0.33, 0.33, 0), smoothing_function=smoothing)
     
     # BLEU@4 calculation
-    bleu4 = sentence_bleu([label_words_list], pred_words_list, weights=(0, 0, 0, 1), smoothing_function=smoothing)
+    bleu4 = sentence_bleu([label_words_list], pred_words_list, weights=(0.25, 0.25, 0.25, 0.25), smoothing_function=smoothing)
     
     return bleu1, bleu2, bleu3, bleu4
 
@@ -341,7 +341,7 @@ test_df=pd.read_csv(params['data_path']+'dataset.csv')
 test_json_list=[]
 for i in range(len(test_df)):
     test_json_list.append(glob(params['test_json']+'**/'+test_df['Path'][i].replace('.png','.json'))[0])
-# test_json_list=glob('../../data/synth/010.위암 병리 이미지 및 판독문 합성 데이터/1.데이터/3.Test/2.라벨링데이터/**/*.json')
+# test_json_list=glob('../../data/synth/011.유방암 병리 이미지 및 판독문 합성 데이터/1.데이터/3.Test/2.라벨링데이터/**/*.json')
 test_image_list=[f.replace('2.라벨링데이터', '1.원천데이터') for f in test_json_list]
 test_image_list=[f.replace('.json', '.png') for f in test_image_list]
 test_caption_list=[]
@@ -363,8 +363,8 @@ decoder = DecoderTransformer(params['embed_size'], len(vocab), 15, params['hidde
 criterion = nn.CrossEntropyLoss()
 model_param = list(decoder.parameters()) + list(encoder.parameters())
 optimizer = torch.optim.Adam(model_param, lr=params['lr'], betas=(params['beta1'], params['beta2']))
-encoder.load_state_dict(torch.load('../../model/captioning/ST_encoder_check.pth',map_location=device))
-decoder.load_state_dict(torch.load('../../model/captioning/ST_decoder_check.pth',map_location=device))
+encoder.load_state_dict(torch.load('../../model/captioning/BR_encoder_check.pth',map_location=device))
+decoder.load_state_dict(torch.load('../../model/captioning/BR_decoder_check.pth',map_location=device))
 
 
 total_labels = []
@@ -412,7 +412,7 @@ with torch.no_grad():
 
             test_df.loc[len(test_df)]={'Path':os.path.basename(path[i]),'Predicted':predicted_sentence,'label':target_sentence,'BLEU1':bleu_11[0],'BLEU2':bleu_11[1],'BLEU3':bleu_11[2],'BLEU4':bleu_11[3],'Rouge1':rouge_score[0],'Rouge2':rouge_score[1],'RougeL':rouge_score[2]}
         test_tq.set_description(f"test BLEU-1: {test_bleu_score/(test_count):.4f}")
-test_df.to_csv('../../result/caption_result/ST_result.csv',index=False)
+test_df.to_csv('../../result/caption_result/BR_result.csv',index=False)
 
 print(f'Bleu-1:{np.array(total_bleu)[:,0].mean():.4f}+-{np.array(total_bleu)[:,0].std():.4f} \nBleu-2:{np.array(total_bleu)[:,1].mean():.4f}+-{np.array(total_bleu)[:,1].std():.4f} \nBleu-3:{np.array(total_bleu)[:,2].mean():.4f}+-{np.array(total_bleu)[:,2].std():.4f} \nBleu-4:{np.array(total_bleu)[:,3].mean():.4f}+-{np.array(total_bleu)[:,3].std():.4f} \nRogue-1:{np.array(total_Rogue)[:,0].mean():.4f}+-{np.array(total_Rogue)[:,0].std():.4f} \nRogue-2:{np.array(total_Rogue)[:,1].mean():.4f}+-{np.array(total_Rogue)[:,1].std():.4f} \nRogue-L:{np.array(total_Rogue)[:,2].mean():.4f}+-{np.array(total_Rogue)[:,2].std():.4f}')
 end_time = time.time()
